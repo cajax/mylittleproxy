@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ericchanky/tunnel/proto"
 	"github.com/koding/logging"
-	"github.com/koding/tunnel/proto"
 
 	"github.com/hashicorp/yamux"
 )

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/ericchanky/tunnel/proto"
 	"github.com/koding/logging"
-	"github.com/koding/tunnel/proto"
 )
 
 var (

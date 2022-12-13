@@ -5,9 +5,11 @@ package tunnel
 
 import (
 	"bufio"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -17,8 +19,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ericchanky/tunnel/proto"
 	"github.com/koding/logging"
-	"github.com/koding/tunnel/proto"
+	"golang.org/x/net/http2"
 
 	"github.com/hashicorp/yamux"
 )
@@ -77,6 +80,14 @@ type Server struct {
 	yamuxConfig *yamux.Config
 
 	log logging.Logger
+
+	parseIdentifier func(id, path string) string
+
+	tunnelHeader string
+
+	backend string
+
+	client http.Client
 }
 
 // ServerConfig defines the configuration for the Server
@@ -102,6 +113,12 @@ type ServerConfig struct {
 	// YamuxConfig defines the config which passed to every new yamux.Session. If nil
 	// yamux.DefaultConfig() is used.
 	YamuxConfig *yamux.Config
+
+	ParseIdentifier func(id, path string) string
+
+	TunnelHeader string
+
+	Backend string
 }
 
 // NewServer creates a new Server. The defaults are used if config is nil.
@@ -141,6 +158,29 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		yamuxConfig:           yamuxConfig,
 		connCh:                connCh,
 		log:                   log,
+		parseIdentifier:       cfg.ParseIdentifier,
+		tunnelHeader:          cfg.TunnelHeader,
+		backend:               cfg.Backend,
+	}
+
+	s.client = http.Client{
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLS: func(network, addr string, tcfg *tls.Config) (net.Conn, error) {
+				if addr != s.backend {
+					identifier := strings.Replace(addr, ":80", "", 1)
+					s.log.Debug("Checking identifier %s", identifier)
+					stream, err := s.dial(identifier, proto.HTTP, 7777)
+					if err == nil {
+						s.log.Debug("Establish connection to client %s", addr)
+						return stream, nil
+					}
+					s.log.Debug("Cannot get connection with %s, %s", addr, err.Error())
+				}
+				s.log.Debug("Use original backend")
+				return net.Dial(network, s.backend)
+			},
+		},
 	}
 
 	go s.serveTCP()
@@ -176,39 +216,49 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) error {
 		s.httpDirector(r)
 	}
 
-	hostPort := strings.ToLower(r.Host)
-	if hostPort == "" {
-		return errors.New("request host is empty")
-	}
+	// hostPort := strings.ToLower(r.Host)
+	// if hostPort == "" {
+	// 	return errors.New("request host is empty")
+	// }
 
-	// if someone hits foo.example.com:8080, this should be proxied to
-	// localhost:8080, so send the port to the client so it knows how to proxy
-	// correctly. If no port is available, it's up to client how to interpret it
-	host, port, err := parseHostPort(hostPort)
-	if err != nil {
-		// no need to return, just continue lazily, port will be 0, which in
-		// our case will be proxied to client's local servers port 80
-		s.log.Debug("No port available for %q, sending port 80 to client", hostPort)
-	}
+	// // if someone hits foo.example.com:8080, this should be proxied to
+	// // localhost:8080, so send the port to the client so it knows how to proxy
+	// // correctly. If no port is available, it's up to client how to interpret it
+	// host, port, err := parseHostPort(hostPort)
+	// if err != nil {
+	// 	// no need to return, just continue lazily, port will be 0, which in
+	// 	// our case will be proxied to client's local servers port 80
+	// 	s.log.Debug("No port available for %q, sending port 80 to client", hostPort)
+	// }
 
-	// get the identifier associated with this host
-	identifier, ok := s.getIdentifier(hostPort)
-	if !ok {
-		// fallback to host
-		identifier, ok = s.getIdentifier(host)
-		if !ok {
-			return fmt.Errorf("no virtual host available for %q", hostPort)
-		}
-	}
+	// // get the identifier associated with this host
+	// identifier, ok := s.getIdentifier(hostPort)
+	// if !ok {
+	// 	// fallback to host
+	// 	identifier, ok = s.getIdentifier(host)
+	// 	if !ok {
+	// 		return fmt.Errorf("no virtual host available for %q", hostPort)
+	// 	}
+	// }
+
+	identifier := s.parseIdentifier(r.Header.Get(s.tunnelHeader), r.URL.Path)
+	s.log.Debug("identifier %s", identifier)
 
 	if isWebsocketConn(r) {
 		s.log.Debug("handling websocket connection")
 
-		return s.handleWSConn(w, r, identifier, port)
+		return s.handleWSConn(w, r, identifier, 7777)
 	}
 
-	stream, err := s.dial(identifier, proto.HTTP, port)
-	if err != nil {
+	stream, err := s.dial(identifier, proto.HTTP, 7777)
+	if err == errNoClientSession {
+		// replace stream by the original request
+		s.log.Debug("No client session, passthrough")
+		stream, err = net.Dial("tcp", s.backend)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
 		return err
 	}
 	defer func() {
@@ -244,6 +294,86 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) error {
 			s.log.Debug("Client closed the connection, couldn't copy response")
 		} else {
 			s.log.Error("copy err: %s", err) // do not return, because we might write multipe headers
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) HandleHTTP2(w http.ResponseWriter, r *http.Request) error {
+	s.log.Debug("Handle HTTP2")
+
+	identifier := s.parseIdentifier(r.Header.Get(s.tunnelHeader), r.URL.Path)
+	if identifier == "" {
+		identifier = s.backend
+	}
+	s.log.Debug("identifier %s", identifier)
+
+	// client := http.Client{
+	// 	Transport: &http2.Transport{
+	// 		AllowHTTP: true,
+	// 		DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+	// 			s.log.Debug("network: %s, addr: %s", network, addr)
+	// 			stream, err := s.dial(identifier, proto.HTTP, 7777)
+	// 			if err == errNoClientSession {
+	// 				// replace stream by the proxy request
+	// 				s.log.Debug("No client session, passthrough")
+	// 				return net.DialTimeout(network, addr, 1*time.Minute)
+	// 			}
+	// 			return stream, err
+	// 		},
+	// 	},
+	// 	Timeout: 1 * time.Minute,
+	// }
+
+	url := fmt.Sprintf("http://%s%s", identifier, r.URL.Path)
+	s.log.Debug("URL: %s", url)
+	req, err := http.NewRequest("POST", url, r.Body)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range r.Header {
+		nv := make([]string, len(v))
+		copy(nv, v)
+		for _, vv := range nv {
+			req.Header.Add(k, vv)
+		}
+	}
+
+	s.log.Debug("Proxying http2 request")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		s.log.Debug("Cannot get proxy response, %s", err.Error())
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		s.log.Debug("Cannot read proxy body, %s", err.Error())
+		return err
+	}
+
+	for k, v := range resp.Header {
+		for _, vv := range v {
+			s.log.Debug("Header %s: %s", k, vv)
+			w.Header().Add(k, vv)
+		}
+	}
+
+	for k := range resp.Trailer {
+		s.log.Debug("Trailer Header %s", k)
+		w.Header().Add("Trailer", k)
+	}
+
+	w.Write(body)
+
+	for k, v := range resp.Trailer {
+		for _, vv := range v {
+			s.log.Debug("Tailer %s: %s", k, vv)
+			w.Header().Add(k, vv)
 		}
 	}
 
@@ -393,10 +523,15 @@ func (s *Server) dial(identifier string, p proto.Type, port int) (net.Conn, erro
 // tunnel TCP connections.
 func (s *Server) controlHandler(w http.ResponseWriter, r *http.Request) (ctErr error) {
 	identifier := r.Header.Get(proto.ClientIdentifierHeader)
-	_, ok := s.getHost(identifier)
-	if !ok {
-		return fmt.Errorf("no host associated for identifier %s. please use server.AddHost()", identifier)
+	if identifier == "" {
+		return fmt.Errorf("not enough param, identifier: %s", identifier)
 	}
+
+	// identifier := r.Header.Get(proto.ClientIdentifierHeader)
+	// _, ok := s.getHost(identifier)
+	// if !ok {
+	// 	return fmt.Errorf("no host associated for identifier %s. please use server.AddHost()", identifier)
+	// }
 
 	ct, ok := s.getControl(identifier)
 	if ok {
@@ -404,7 +539,7 @@ func (s *Server) controlHandler(w http.ResponseWriter, r *http.Request) (ctErr e
 		s.deleteControl(identifier)
 		s.deleteSession(identifier)
 		s.log.Warning("Control connection for %q already exists. This is a race condition and needs to be fixed on client implementation", identifier)
-		return fmt.Errorf("control conn for %s already exist. \n", identifier)
+		return fmt.Errorf("control conn for %s already exist", identifier)
 	}
 
 	s.log.Debug("Tunnel with identifier %s", identifier)
@@ -693,7 +828,7 @@ func (s *Server) checkConnect(fn func(w http.ResponseWriter, r *http.Request) er
 				s.onDisconnect(identifier, err)
 			}
 
-			http.Error(w, err.Error(), 502)
+			http.Error(w, err.Error(), http.StatusBadGateway)
 		}
 	})
 }

@@ -14,8 +14,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/koding/tunnel"
-	"github.com/koding/tunnel/tunneltest"
+	"github.com/ericchanky/tunnel"
+	"github.com/ericchanky/tunnel/tunneltest"
 
 	"github.com/gorilla/websocket"
 )
