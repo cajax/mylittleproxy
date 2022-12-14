@@ -68,6 +68,7 @@ func Proxy(p ProxyFuncs) ProxyFunc {
 // It reads from one connection and writes to the other.
 // It's a building block for ProxyFunc implementations.
 func Join(local, remote net.Conn, log logging.Logger) {
+	defer local.Close()
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -85,7 +86,7 @@ func Join(local, remote net.Conn, log logging.Logger) {
 
 		// not for yamux streams, but for client to local server connections
 		if d, ok := dst.(*net.TCPConn); ok {
-			if err := d.Close(); err != nil {
+			if err := d.CloseWrite(); err != nil {
 				log.Debug("%s: closeWrite error: %s", side, err)
 			}
 
