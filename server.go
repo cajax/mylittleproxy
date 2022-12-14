@@ -172,10 +172,10 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 					s.log.Debug("Checking identifier %s", identifier)
 					stream, err := s.dial(identifier, proto.HTTP, 7777)
 					if err == nil {
-						s.log.Debug("Establish connection to client %s", addr)
+						s.log.Debug("Establish connection to client %s", identifier)
 						return stream, nil
 					}
-					s.log.Debug("Cannot get connection with %s, %s", addr, err.Error())
+					s.log.Debug("Cannot get connection with %s, %s", identifier, err.Error())
 				}
 				s.log.Debug("Use original backend")
 				return net.Dial(network, s.backend)
