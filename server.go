@@ -172,9 +172,11 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 					s.log.Debug("Checking identifier %s", identifier)
 					stream, err := s.dial(identifier, proto.HTTP, 7777)
 					if err == nil {
+						s.log.Info("Obtain identifier %s", identifier)
 						s.log.Debug("Establish connection to client %s", identifier)
 						return stream, nil
 					}
+					s.log.Info("Lose identifier %s", identifier)
 					s.log.Debug("Cannot get connection with %s, %s", identifier, err.Error())
 				}
 				s.log.Debug("Use original backend")
@@ -563,6 +565,7 @@ func (s *Server) controlHandler(w http.ResponseWriter, r *http.Request) (ctErr e
 	}
 
 	s.log.Debug("Creating control session")
+	s.log.Info("Adding session for %s", identifier)
 	session, err := yamux.Server(conn, s.yamuxConfig)
 	if err != nil {
 		return err
@@ -616,6 +619,7 @@ func (s *Server) controlHandler(w http.ResponseWriter, r *http.Request) (ctErr e
 	go s.listenControl(ct)
 
 	s.log.Debug("Control connection is setup")
+	s.log.Info("Connection for %s is setup", identifier)
 	return nil
 }
 
@@ -788,6 +792,7 @@ func (s *Server) addSession(identifier string, session *yamux.Session) {
 }
 
 func (s *Server) deleteSession(identifier string) {
+	s.log.Info("Deleting session for %s", identifier)
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
 

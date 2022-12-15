@@ -68,7 +68,6 @@ func Proxy(p ProxyFuncs) ProxyFunc {
 // It reads from one connection and writes to the other.
 // It's a building block for ProxyFunc implementations.
 func Join(local, remote net.Conn, log logging.Logger) {
-	defer local.Close()
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -80,6 +79,7 @@ func Join(local, remote net.Conn, log logging.Logger) {
 			log.Error("%s: copy error: %s", side, err)
 		}
 
+		dst.Close()
 		if err := src.Close(); err != nil {
 			log.Debug("%s: close error: %s", side, err)
 		}
@@ -100,3 +100,7 @@ func Join(local, remote net.Conn, log logging.Logger) {
 
 	wg.Wait()
 }
+
+type readerFunc func(p []byte) (n int, err error)
+
+func (rf readerFunc) Read(p []byte) (n int, err error) { return rf(p) }
