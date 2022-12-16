@@ -311,22 +311,10 @@ func (s *Server) HandleHTTP2(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.log.Debug("identifier %s", identifier)
 
-	// client := http.Client{
-	// 	Transport: &http2.Transport{
-	// 		AllowHTTP: true,
-	// 		DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
-	// 			s.log.Debug("network: %s, addr: %s", network, addr)
-	// 			stream, err := s.dial(identifier, proto.HTTP, 7777)
-	// 			if err == errNoClientSession {
-	// 				// replace stream by the proxy request
-	// 				s.log.Debug("No client session, passthrough")
-	// 				return net.DialTimeout(network, addr, 1*time.Minute)
-	// 			}
-	// 			return stream, err
-	// 		},
-	// 	},
-	// 	Timeout: 1 * time.Minute,
-	// }
+	// check identifier exists
+	if _, ok := s.getControl(identifier); !ok {
+		identifier = s.backend
+	}
 
 	url := fmt.Sprintf("http://%s%s", identifier, r.URL.Path)
 	s.log.Debug("URL: %s", url)
