@@ -55,9 +55,6 @@ type Server struct {
 	// virtualAddrs.
 	virtualAddrs *vaddrStorage
 
-	// connCh is used to publish accepted connections for tcp tunnels.
-	connCh chan net.Conn
-
 	// onConnectCallbacks contains client callbacks called when control
 	// session is established for a client with given identifier.
 	onConnectCallbacks *callbacks
@@ -89,9 +86,6 @@ type Server struct {
 
 	// List of allowed clients. Allows any if list is empty
 	allowedClients []string
-
-	// Whether enable TCP proxy
-	ServeTCP bool
 }
 
 // ServerConfig defines the configuration for the Server
@@ -123,9 +117,6 @@ type ServerConfig struct {
 
 	//List of allowed clients. Allows any if list is empty
 	AllowedClients []string
-
-	// Whether enable TCP proxy
-	ServeTCP bool
 }
 
 // NewServer creates a new Server. The defaults are used if config is nil.
@@ -163,16 +154,10 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		stateCh:               cfg.StateChanges,
 		httpDirector:          cfg.Director,
 		yamuxConfig:           yamuxConfig,
-		connCh:                connCh,
 		log:                   log,
 		signatureKey:          cfg.SignatureKey,
 		allowedHosts:          cfg.AllowedHosts,
 		allowedClients:        cfg.AllowedClients,
-		ServeTCP:              cfg.ServeTCP,
-	}
-
-	if s.ServeTCP {
-		go s.serveTCP()
 	}
 
 	return s, nil
@@ -303,20 +288,6 @@ func (s *Server) rewriteRequest(r *http.Request, identifier string) bool {
 	return false
 }
 
-func (s *Server) serveTCP() {
-	for conn := range s.connCh {
-		go s.serveTCPConn(conn)
-	}
-}
-
-func (s *Server) serveTCPConn(conn net.Conn) {
-	err := s.handleTCPConn(conn)
-	if err != nil {
-		s.log.Warn("failed to serve ", zap.Any("address", conn.RemoteAddr()), zap.Error(err))
-		conn.Close()
-	}
-}
-
 func (s *Server) handleWSConn(w http.ResponseWriter, r *http.Request, ident string, port int) error {
 	hj, ok := w.(http.Hijacker)
 	if !ok {
@@ -347,33 +318,6 @@ func (s *Server) handleWSConn(w http.ResponseWriter, r *http.Request, ident stri
 	if err := resp.Write(conn); err != nil {
 		err = errors.New("unable to write upgrade response: " + err.Error())
 		return nonil(err, stream.Close())
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go s.proxy(&wg, conn, stream)
-	go s.proxy(&wg, stream, conn)
-
-	wg.Wait()
-
-	return nonil(stream.Close(), conn.Close())
-}
-
-func (s *Server) handleTCPConn(conn net.Conn) error {
-	ident, ok := s.virtualAddrs.getIdent(conn)
-	if !ok {
-		return fmt.Errorf("no virtual address available for %s", conn.LocalAddr())
-	}
-
-	_, port, err := parseHostPort(conn.LocalAddr().String())
-	if err != nil {
-		return err
-	}
-
-	stream, err := s.dial(ident, proto.TCP, port)
-	if err != nil {
-		return err
 	}
 
 	var wg sync.WaitGroup
