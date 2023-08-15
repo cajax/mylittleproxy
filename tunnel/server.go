@@ -52,9 +52,6 @@ type Server struct {
 	// virtualHosts is used to map public hosts to remote clients.
 	virtualHosts vhostStorage
 
-	// virtualAddrs.
-	virtualAddrs *vaddrStorage
-
 	// onConnectCallbacks contains client callbacks called when control
 	// session is established for a client with given identifier.
 	onConnectCallbacks *callbacks
@@ -135,20 +132,12 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		log = cfg.Log
 	}
 
-	connCh := make(chan net.Conn)
-
-	opts := &vaddrOptions{
-		connCh: connCh,
-		log:    log,
-	}
-
 	s := &Server{
 		pending:               make(map[string]chan net.Conn),
 		sessions:              make(map[string]*yamux.Session),
 		onConnectCallbacks:    newCallbacks("OnConnect"),
 		onDisconnectCallbacks: newCallbacks("OnDisconnect"),
 		virtualHosts:          newVirtualHosts(),
-		virtualAddrs:          newVirtualAddrs(opts),
 		controls:              newControls(),
 		states:                make(map[string]ClientState),
 		stateCh:               cfg.StateChanges,
@@ -590,29 +579,6 @@ func (s *Server) AddHost(host, identifier string, rewrites []HTTPRewriteRule) {
 // host is denied.
 func (s *Server) DeleteHost(host string) {
 	s.virtualHosts.DeleteHost(host)
-}
-
-// AddAddr starts accepting connections on listener l, routing every connection
-// to a tunnel client given by the identifier.
-//
-// When ip parameter is nil, all connections accepted from the listener are
-// routed to the tunnel client specified by the identifier (port-based routing).
-//
-// When ip parameter is non-nil, only those connections are routed whose local
-// address matches the specified ip (ip-based routing).
-//
-// If l listens on multiple interfaces it's desirable to call AddAddr multiple
-// times with the same l value but different ip one.
-func (s *Server) AddAddr(l net.Listener, ip net.IP, identifier string) {
-	s.virtualAddrs.Add(l, ip, identifier)
-}
-
-// DeleteAddr stops listening for connections on the given listener.
-//
-// Upon return no more connections will be tunneled, but as the method does not
-// close the listener, so any ongoing connection won't get interrupted.
-func (s *Server) DeleteAddr(l net.Listener, ip net.IP) {
-	s.virtualAddrs.Delete(l, ip)
 }
 
 func (s *Server) getIdentifier(host string) (string, bool) {
