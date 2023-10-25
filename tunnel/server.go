@@ -196,7 +196,10 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	s.rewriteRequest(r, identifier)
+	if !s.rewriteRequest(r, identifier) {
+		http.Error(w, "403 Forbidden", http.StatusForbidden)
+		return errors.New("No matching rule")
+	}
 
 	if isWebsocketConn(r) {
 		s.log.Debug("handling websocket connection", zap.String("client_id", identifier), zap.String("URL", r.URL.String()))
@@ -258,7 +261,10 @@ func (s *Server) rewriteRequest(r *http.Request, identifier string) bool {
 	r.Host = vh.TargetHost
 	for _, rewrite := range vh.Rewrite {
 		if rewrite.re.MatchString(r.URL.Path) {
-			r.URL.Path = rewrite.re.ReplaceAllString(r.URL.Path, rewrite.replacement)
+			originalPath := r.URL.Path
+			newPath := rewrite.re.ReplaceAllString(r.URL.Path, rewrite.replacement)
+			r.URL.Path = newPath
+			s.log.Info("Rewrote path", zap.String("client_id", identifier), zap.String("from", originalPath), zap.String("to", newPath))
 			return true
 		}
 	}
