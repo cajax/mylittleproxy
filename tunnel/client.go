@@ -175,7 +175,7 @@ type ClientConfig struct {
 	// Custom control path
 	ControlPath string
 
-	// Custom HTTP method of cotrol protocol
+	// Custom HTTP method of control protocol
 	ControlMethod string
 }
 
