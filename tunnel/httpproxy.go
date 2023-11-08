@@ -42,7 +42,7 @@ func (p *HTTPProxy) Proxy(remote net.Conn, msg *proto.ControlMessage) {
 
 	req, err := http.ReadRequest(bufio.NewReader(remote))
 	if err != nil {
-		p.Log.Warn("Failed to parse original request", zap.String("URL", req.URL.String()), zap.Error(err))
+		p.Log.Warn("Failed to parse original request", zap.Error(err))
 		p.sendError(remote)
 		return
 	}

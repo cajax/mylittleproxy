@@ -262,20 +262,23 @@ func (s *Server) rewriteRequest(r *http.Request, identifier string) bool {
 	vh, ok := s.virtualHosts.GetVirtualHost(identifier)
 
 	if !ok {
+		s.log.Info("Can't find virtual host for given client id", zap.String("client_id", identifier))
 		return false
 	}
 
+	originalPath := r.URL.Path
+	s.log.Info("Rewriting path", zap.String("client_id", identifier), zap.String("from", originalPath))
 	r.Host = vh.TargetHost
 	for _, rewrite := range vh.Rewrite {
 		if rewrite.re.MatchString(r.URL.Path) {
-			originalPath := r.URL.Path
-			newPath := rewrite.re.ReplaceAllString(r.URL.Path, rewrite.replacement)
+			newPath := rewrite.re.ReplaceAllString(originalPath, rewrite.replacement)
 			r.URL.Path = newPath
 			s.log.Info("Rewrote path", zap.String("client_id", identifier), zap.String("from", originalPath), zap.String("to", newPath))
 			return true
 		}
 	}
 
+	s.log.Info("Can't find virtual host for given client id", zap.String("client_id", identifier))
 	return false
 }
 
