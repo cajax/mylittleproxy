@@ -16,7 +16,7 @@ type vhostStorage interface {
 	GetHost(identifier string) (string, bool)
 
 	// GetVirtualHost returns entire virtualhost info for the given identifier
-	GetVirtualHost(identifier string) (*virtualHost, bool)
+	GetVirtualHost(identifier string) (*virtualHost, bool, string)
 
 	// GetIdentifier returns the identifier for the given host
 	GetIdentifier(host string) (string, bool)
@@ -25,7 +25,6 @@ type vhostStorage interface {
 type virtualHost struct {
 	identifier string
 	Rewrite    []HTTPRewriteRule
-	TargetHost string
 }
 
 type HTTPRewriteRule struct {
@@ -87,15 +86,15 @@ func (v *virtualHosts) GetHost(identifier string) (string, bool) {
 	return "", false
 }
 
-func (v *virtualHosts) GetVirtualHost(identifier string) (*virtualHost, bool) {
+func (v *virtualHosts) GetVirtualHost(identifier string) (*virtualHost, bool, string) {
 	v.Lock()
 	defer v.Unlock()
 
-	for _, hst := range v.mapping {
+	for hostId, hst := range v.mapping {
 		if hst.identifier == identifier {
-			return hst, true
+			return hst, true, hostId
 		}
 	}
 
-	return nil, false
+	return nil, false, ""
 }
