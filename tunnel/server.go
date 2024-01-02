@@ -190,7 +190,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) error {
 
 	host, _, err := parseHostPort(hostPort)
 	if err != nil {
-		s.log.Debug("Failed to parse host", zap.String("host", hostPort))
+		s.log.Debug("Failed to parse host", zap.String("host", hostPort), zap.Error(err))
 	}
 
 	// get the identifier associated with this host
@@ -259,7 +259,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) error {
 
 // rewriteRequest replaces target host and path with regex rules
 func (s *Server) rewriteRequest(r *http.Request, identifier string) bool {
-	vh, ok := s.virtualHosts.GetVirtualHost(identifier)
+	vh, ok, _ := s.virtualHosts.GetVirtualHost(identifier)
 
 	if !ok {
 		s.log.Info("Can't find virtual host for given client id", zap.String("client_id", identifier))
@@ -268,7 +268,7 @@ func (s *Server) rewriteRequest(r *http.Request, identifier string) bool {
 
 	originalPath := r.URL.Path
 	s.log.Info("Rewriting path", zap.String("client_id", identifier), zap.String("from", originalPath))
-	r.Host = vh.TargetHost
+
 	for _, rewrite := range vh.Rewrite {
 		if rewrite.re.MatchString(r.URL.Path) {
 			newPath := rewrite.re.ReplaceAllString(originalPath, rewrite.replacement)
@@ -642,6 +642,10 @@ func (s *Server) deleteSession(identifier string) {
 	}
 
 	delete(s.sessions, identifier)
+	_, found, hostId := s.virtualHosts.GetVirtualHost(identifier)
+	if found {
+		s.DeleteHost(hostId)
+	}
 }
 
 func copyHeader(dst, src http.Header) {
