@@ -268,6 +268,7 @@ func (s *Server) rewriteRequest(r *http.Request, identifier string) bool {
 
 	originalPath := r.URL.Path
 	s.log.Info("Rewriting path", zap.String("client_id", identifier), zap.String("from", originalPath))
+	r.Host = ""
 
 	for _, rewrite := range vh.Rewrite {
 		if rewrite.re.MatchString(r.URL.Path) {
