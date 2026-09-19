@@ -1,0 +1,9 @@
+{
+  "debug": false,
+  "listen": ":8080",
+  "signatureKey": "",
+  "allowedHosts": ["^.*\\.example\\.com$"],
+  "allowedClients": [],
+  "controlPath": "/_controlPath",
+  "controlMethod": "POST"
+}
