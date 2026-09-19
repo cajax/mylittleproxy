@@ -15,6 +15,19 @@ import (
 
 func main() {
 	configPath := flag.String("c", tunnel.GetExecutableDir()+string(os.PathSeparator)+"config.json", "Path to server config file")
+
+	generate := flag.Bool("generate-client-config", false,
+		"Print a client config derived from this server's config to stdout and exit")
+	genOpts := clientConfigOptions{}
+	flag.StringVar(&genOpts.identifier, "identifier", "", "Client identifier for -generate-client-config")
+	flag.StringVar(&genOpts.domain, "domain", "", "Domain the client will serve, for -generate-client-config")
+	flag.StringVar(&genOpts.target, "target", "", "Local server the client proxies to, for -generate-client-config (default "+defaultGeneratedTarget+")")
+	flag.StringVar(&genOpts.address, "client-address", "",
+		"Address clients should dial, for -generate-client-config. Required when the server listens on every interface")
+	flag.BoolVar(&genOpts.omitSignatureKey, "omit-signature-key", false,
+		"Leave signatureKey out of the generated config, for clients that read MYLITTLEPROXY_SIGNATURE_KEY")
+	flag.BoolVar(&genOpts.debug, "client-debug", false, "Set debug in the generated client config")
+
 	flag.Parse()
 	var config appConfig.Server
 	err := tunnel.GetConfig(configPath, &config)
@@ -22,6 +35,14 @@ func main() {
 	if err != nil {
 		log.Printf("Unable to read config: %s", err)
 		os.Exit(1)
+	}
+
+	if *generate {
+		if err := generateClientConfig(config, genOpts, os.Stdout); err != nil {
+			log.Printf("Unable to generate client config: %s", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	var logger *zap.Logger
