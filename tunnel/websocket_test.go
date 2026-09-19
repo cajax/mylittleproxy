@@ -1,3 +1,5 @@
+//go:build upstream
+
 package tunnel_test
 
 import (

@@ -388,7 +388,7 @@ func (s *Server) controlHandler(w http.ResponseWriter, r *http.Request) (ctErr e
 	signature := r.Header.Get(proto.ClientIdentifierSignature)
 
 	if !checkIdentifierSignature(identifier, s.signatureKey, signature) {
-		return fmt.Errorf("invalid identity signature", identifier)
+		return fmt.Errorf("invalid identity signature for identifier %s", identifier)
 	}
 
 	_, ok := s.getHost(identifier)
