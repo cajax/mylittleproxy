@@ -328,7 +328,11 @@ func (s *Server) handleWSConn(w http.ResponseWriter, r *http.Request, ident stri
 		return nonil(err, stream.Close())
 	}
 
-	resp, err := http.ReadResponse(bufio.NewReader(stream), r)
+	// The reader may buffer frames that arrived right behind the upgrade
+	// response, so the rest of the conversation has to come through it.
+	br := bufio.NewReader(stream)
+
+	resp, err := http.ReadResponse(br, r)
 	if err != nil {
 		err = errors.New("unable to read upgrade response: " + err.Error())
 		return nonil(err, stream.Close())
@@ -339,23 +343,16 @@ func (s *Server) handleWSConn(w http.ResponseWriter, r *http.Request, ident stri
 		return nonil(err, stream.Close())
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
+	if n := br.Buffered(); n > 0 {
+		if _, err := io.CopyN(conn, br, int64(n)); err != nil {
+			err = errors.New("unable to forward buffered frames: " + err.Error())
+			return nonil(err, stream.Close())
+		}
+	}
 
-	go s.proxy(&wg, conn, stream)
-	go s.proxy(&wg, stream, conn)
+	joinStreams(conn, stream, s.log)
 
-	wg.Wait()
-
-	return nonil(stream.Close(), conn.Close())
-}
-
-func (s *Server) proxy(wg *sync.WaitGroup, dst, src net.Conn) {
-	defer wg.Done()
-
-	s.log.Debug("tunneling", zap.Any("from", src.RemoteAddr()), zap.Any("to", dst.RemoteAddr()))
-	n, err := io.Copy(dst, src)
-	s.log.Debug("tunneled %d bytes %s -> %s: %v", zap.Int64("bytes", n), zap.Any("from", src.RemoteAddr()), zap.Any("to", dst.RemoteAddr()), zap.Error(err))
+	return nil
 }
 
 func (s *Server) dial(identifier string, p proto.Type, port int) (net.Conn, error) {
