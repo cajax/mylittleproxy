@@ -43,13 +43,13 @@ func (p *HTTPProxy) Proxy(remote net.Conn, msg *proto.ControlMessage) {
 
 	req, err := http.ReadRequest(bufio.NewReader(remote))
 	if err != nil {
-		p.Log.Warn("Failed to parse original request", zap.Error(err))
+		p.log().Warn("Failed to parse original request", zap.Error(err))
 		p.sendError(remote)
 		return
 	}
 
 	if err := p.patchRequest(req); err != nil {
-		p.Log.Warn("Failed to build request to local server",
+		p.log().Warn("Failed to build request to local server",
 			zap.String("target", p.TargetHost), zap.Error(err))
 		p.sendError(remote)
 		return
@@ -60,15 +60,28 @@ func (p *HTTPProxy) Proxy(remote net.Conn, msg *proto.ControlMessage) {
 	if res != nil {
 		status = res.Status
 	}
-	p.Log.Info("Handled HTTP", zap.String("URL", req.URL.String()), zap.Error(err), zap.String("status", status))
+	p.log().Info("Handled HTTP", zap.String("URL", req.URL.String()), zap.Error(err), zap.String("status", status))
 	if err != nil {
-		p.Log.Warn("Failed remote request", zap.String("URL", req.URL.String()), zap.Error(err))
+		p.log().Warn("Failed remote request", zap.String("URL", req.URL.String()), zap.Error(err))
 		p.sendError(remote)
 		return
 	}
+	defer res.Body.Close()
 
-	res.Write(remote)
-	return
+	if err := res.Write(remote); err != nil {
+		p.log().Warn("Failed to write response to the tunnel",
+			zap.String("URL", req.URL.String()), zap.Error(err))
+	}
+}
+
+// log returns the configured logger. HTTPProxy is exported and Log is optional,
+// so a caller that left it unset gets a no-op logger rather than a panic.
+func (p *HTTPProxy) log() *zap.Logger {
+	if p.Log == nil {
+		return zap.NewNop()
+	}
+
+	return p.Log
 }
 
 // patchRequest redirects a request that arrived over the tunnel at the local
@@ -101,7 +114,7 @@ func (p *HTTPProxy) sendError(remote net.Conn) {
 	buf := new(bytes.Buffer)
 	w.Write(buf)
 	if _, err := io.Copy(remote, buf); err != nil {
-		p.Log.Debug("Copy in-mem response error: %s", zap.Error(err))
+		p.log().Debug("Copy in-mem response error", zap.Error(err))
 	}
 
 	remote.Close()

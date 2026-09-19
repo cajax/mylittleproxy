@@ -56,6 +56,7 @@ func Proxy(p ProxyFuncs) ProxyFunc {
 		if f == nil {
 			logging.Error("Could not determine proxy function for %v", msg)
 			remote.Close()
+			return
 		}
 
 		f(remote, msg)

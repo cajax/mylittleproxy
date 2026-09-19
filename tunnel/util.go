@@ -18,15 +18,15 @@ import (
 )
 
 // async is a helper function to convert a blocking function to a function
-// returning an error. Useful for plugging function closures into select and co
+// returning an error. Useful for plugging function closures into select and co.
+//
+// The channel is buffered, so the result is kept for whoever reads it later and
+// the goroutine still finishes when the caller gave up waiting and abandoned the
+// channel.
 func async(fn func() error) <-chan error {
-	errChan := make(chan error, 0)
+	errChan := make(chan error, 1)
 	go func() {
-		select {
-		case errChan <- fn():
-		default:
-		}
-
+		errChan <- fn()
 		close(errChan)
 	}()
 
