@@ -6,10 +6,6 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/hashicorp/yamux v0.1.1 h1:yrQxtgseBDrq9Y652vSRDvsKCJKOUD+GzTS4Y0Y8pvE=
 github.com/hashicorp/yamux v0.1.1/go.mod h1:CtWFDAQgb7dxtzFs4tWbplKIe2jSi3+5vKbgIO0SLnQ=
-github.com/koding/logging v0.0.0-20160720134017-8b5a689ed69b h1:Ix1hwcOtW6e0KG1+Fn1blMih1O4td/fa9Q2Br0/zPBo=
-github.com/koding/logging v0.0.0-20160720134017-8b5a689ed69b/go.mod h1:km9Clt+22fAbEvoPJSRufXDN110ZA6xLNU7oe4dwRHk=
-github.com/koding/tunnel v0.0.0-20170601195443-35a8b95662bf h1:2flo/nnhfe3sSxQ/MHlK7KoY54tQ1pAvMzkh0ZOxyH4=
-github.com/koding/tunnel v0.0.0-20170601195443-35a8b95662bf/go.mod h1:i+PvDDsWjggoCQOO8bGJJKRB9qfxmHk5yzIEA/h8dzg=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/stretchr/testify v1.8.1 h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=
 go.uber.org/goleak v1.2.0 h1:xqgm/S+aQvhWFTtR0XK3Jvg7z8kGV8P4X14IzwN3Eqk=

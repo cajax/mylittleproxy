@@ -5,16 +5,11 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/cajax/mylittleproxy/proto"
-	"github.com/koding/logging"
 	"go.uber.org/zap"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
-)
-
-var (
-	httpLog = logging.NewLogger("http")
 )
 
 // HTTPProxy forwards HTTP traffic.
