@@ -182,3 +182,62 @@ func TestGeneratedConfigRoundTrips(t *testing.T) {
 		t.Error("output does not end with a newline")
 	}
 }
+
+func TestGenerateClientConfigWritesToTheGivenWriter(t *testing.T) {
+	var out strings.Builder
+
+	err := generateClientConfig(serverConfig(), clientConfigOptions{
+		identifier: "1234",
+		domain:     "app.example.com",
+	}, &out)
+	if err != nil {
+		t.Fatalf("generateClientConfig: %v", err)
+	}
+
+	var back appConfig.Client
+	if err := json.Unmarshal([]byte(out.String()), &back); err != nil {
+		t.Fatalf("the written config is not valid JSON: %v", err)
+	}
+	if back.Identifier != "1234" {
+		t.Errorf("Identifier = %q, want %q", back.Identifier, "1234")
+	}
+}
+
+func TestGenerateClientConfigReportsRejections(t *testing.T) {
+	var out strings.Builder
+
+	err := generateClientConfig(serverConfig(), clientConfigOptions{
+		identifier: "1234",
+		domain:     "app.evil.com",
+	}, &out)
+	if err == nil {
+		t.Fatal("no error for a domain the server would reject")
+	}
+	if out.Len() != 0 {
+		t.Errorf("wrote %q despite the failure, want nothing", out.String())
+	}
+}
+
+// An empty allowedClients list admits anyone with a valid signature, so
+// generation must not refuse.
+func TestBuildClientConfigWithoutAnAllowList(t *testing.T) {
+	cfg := serverConfig()
+	cfg.AllowedClients = nil
+
+	got, err := buildClientConfig(cfg, clientConfigOptions{identifier: "anyone", domain: "app.example.com"})
+	if err != nil {
+		t.Fatalf("buildClientConfig: %v", err)
+	}
+	if got.Identifier != "anyone" {
+		t.Errorf("Identifier = %q, want %q", got.Identifier, "anyone")
+	}
+}
+
+func TestBuildClientConfigRejectsUnparsableAllowedHostPattern(t *testing.T) {
+	cfg := serverConfig()
+	cfg.AllowedHosts = []string{"^*broken("}
+
+	if _, err := buildClientConfig(cfg, clientConfigOptions{identifier: "1234", domain: "app.example.com"}); err == nil {
+		t.Fatal("an invalid allowedHosts pattern was accepted")
+	}
+}

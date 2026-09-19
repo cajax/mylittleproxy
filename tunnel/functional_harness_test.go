@@ -41,6 +41,8 @@ type fixtureConfig struct {
 
 	allowedHosts   []string
 	allowedClients []string
+	// stateChanges receives the server's view of client state transitions.
+	stateChanges chan<- *ClientStateChange
 	// target overrides the local server's address, for the cases where there is
 	// nothing listening.
 	target string
@@ -80,6 +82,7 @@ func newFixture(t *testing.T, cfg fixtureConfig) *fixture {
 		Log:            zap.NewNop(),
 		AllowedHosts:   cfg.allowedHosts,
 		AllowedClients: cfg.allowedClients,
+		StateChanges:   cfg.stateChanges,
 	})
 	f.Tunnel = httptest.NewServer(f.Server)
 
@@ -110,11 +113,18 @@ func newFixture(t *testing.T, cfg fixtureConfig) *fixture {
 func (f *fixture) startClient(identifier, domain, target string, rewrites []proto.HTTPRewriteRule) *Client {
 	f.t.Helper()
 
+	return f.startClientWith(nil, identifier, domain, target, rewrites)
+}
+
+// startClientWith is startClient with a hook to adjust the config first.
+func (f *fixture) startClientWith(adjust func(*ClientConfig), identifier, domain, target string, rewrites []proto.HTTPRewriteRule) *Client {
+	f.t.Helper()
+
 	if len(rewrites) == 0 {
 		rewrites = []proto.HTTPRewriteRule{{From: "/", To: "/"}}
 	}
 
-	c, err := NewClient(&ClientConfig{
+	cfg := &ClientConfig{
 		Identifier:    identifier,
 		SignatureKey:  testSignatureKey,
 		ServerAddr:    trimScheme(f.Tunnel.URL),
@@ -126,7 +136,13 @@ func (f *fixture) startClient(identifier, domain, target string, rewrites []prot
 			Target:  target,
 			Rewrite: rewrites,
 		}},
-	})
+	}
+
+	if adjust != nil {
+		adjust(cfg)
+	}
+
+	c, err := NewClient(cfg)
 	if err != nil {
 		f.t.Fatalf("NewClient: %v", err)
 	}
