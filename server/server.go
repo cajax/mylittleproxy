@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
@@ -58,9 +59,28 @@ func main() {
 		logger.Fatal("unable to initialize tunnel server", zap.Error(err))
 	}
 	logger.Info("Listening", zap.String("control_url", config.Listen+cfg.ControlPath), zap.String("control_method", cfg.ControlMethod))
-	err = http.ListenAndServe(config.Listen, server)
+	err = newHTTPServer(config.Listen, server).ListenAndServe()
 	if err != nil {
 		logger.Fatal("unable to start http server", zap.Error(err))
+	}
+}
+
+// Timeouts for the public listener. ReadTimeout and WriteTimeout are left unset
+// on purpose: they would cap the duration of a tunnelled request or response and
+// break large or streaming bodies. ReadHeaderTimeout bounds how long a client
+// may take to send its headers, and IdleTimeout reaps connections that are kept
+// open without being used.
+const (
+	readHeaderTimeout = 10 * time.Second
+	idleTimeout       = 2 * time.Minute
+)
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 }
 
