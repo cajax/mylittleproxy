@@ -3,6 +3,7 @@ package tunnel
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"github.com/cajax/mylittleproxy/proto"
 	"github.com/koding/logging"
 	"go.uber.org/zap"
@@ -47,7 +48,12 @@ func (p *HTTPProxy) Proxy(remote net.Conn, msg *proto.ControlMessage) {
 		return
 	}
 
-	p.patchRequest(req)
+	if err := p.patchRequest(req); err != nil {
+		p.Log.Warn("Failed to build request to local server",
+			zap.String("target", p.TargetHost), zap.Error(err))
+		p.sendError(remote)
+		return
+	}
 
 	res, err := http.DefaultClient.Do(req)
 	status := ""
@@ -65,12 +71,25 @@ func (p *HTTPProxy) Proxy(remote net.Conn, msg *proto.ControlMessage) {
 	return
 }
 
-func (p *HTTPProxy) patchRequest(req *http.Request) {
-	targetUrl, _ := url.Parse(p.TargetHost)
-	path := req.URL.Path
+// patchRequest redirects a request that arrived over the tunnel at the local
+// server. Only the scheme and host are taken from the configured target: the URL
+// that came off the tunnel is kept as it is, so the path the server rewrote, the
+// query string and their encoding all survive.
+func (p *HTTPProxy) patchRequest(req *http.Request) error {
+	targetUrl, err := url.Parse(p.TargetHost)
+	if err != nil {
+		return fmt.Errorf("invalid target %q: %s", p.TargetHost, err)
+	}
+
+	// Set on requests read by a server, rejected on requests sent by a client.
 	req.RequestURI = ""
-	req.URL = targetUrl
-	req.URL.Path = path
+	req.URL.Scheme = targetUrl.Scheme
+	req.URL.Host = targetUrl.Host
+	// The Host header follows req.URL.Host, the server having cleared req.Host
+	// when it rewrote the request.
+	req.Host = ""
+
+	return nil
 }
 
 func (p *HTTPProxy) sendError(remote net.Conn) {
