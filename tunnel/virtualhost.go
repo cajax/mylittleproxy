@@ -1,13 +1,15 @@
 package tunnel
 
 import (
+	"fmt"
 	"regexp"
 	"sync"
 )
 
 type vhostStorage interface {
-	// AddHost adds the given host and identifier to the storage
-	AddHost(host, identifier string, rewrites []HTTPRewriteRule)
+	// AddHost adds the given host and identifier to the storage. It fails if the
+	// host is already claimed by another identifier.
+	AddHost(host, identifier string, rewrites []HTTPRewriteRule) error
 
 	// DeleteHost deletes the given host
 	DeleteHost(host string)
@@ -47,10 +49,28 @@ func newVirtualHosts() *virtualHosts {
 	}
 }
 
-func (v *virtualHosts) AddHost(host, identifier string, rewrites []HTTPRewriteRule) {
+// AddHost maps host to identifier. A host may only be claimed by one identifier
+// at a time: re-registering a host the identifier already owns is allowed, so a
+// reconnecting client can reclaim it, but claiming a host owned by somebody else
+// is refused. An identifier owns a single host, so any host it held previously
+// is released here.
+func (v *virtualHosts) AddHost(host, identifier string, rewrites []HTTPRewriteRule) error {
 	v.Lock()
+	defer v.Unlock()
+
+	if current, ok := v.mapping[host]; ok && current.identifier != identifier {
+		return fmt.Errorf("host %q is already in use by another client", host)
+	}
+
+	for hostname, hst := range v.mapping {
+		if hst.identifier == identifier && hostname != host {
+			delete(v.mapping, hostname)
+		}
+	}
+
 	v.mapping[host] = &virtualHost{identifier: identifier, Rewrite: rewrites}
-	v.Unlock()
+
+	return nil
 }
 
 func (v *virtualHosts) DeleteHost(host string) {

@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"crypto/hmac"
 	"crypto/sha1"
 	"crypto/tls"
 	"encoding/base64"
@@ -132,7 +133,7 @@ func signIdentifier(id string, key string) string {
 }
 
 func checkIdentifierSignature(id string, key string, signature string) bool {
-	return signature == signIdentifier(id, key)
+	return hmac.Equal([]byte(signature), []byte(signIdentifier(id, key)))
 }
 
 func GetConfig(configPath *string, config any) error {

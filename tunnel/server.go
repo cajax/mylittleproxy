@@ -74,8 +74,8 @@ type Server struct {
 
 	// Key used to signIdentifier Identifier
 	signatureKey string
-	// List of regex rules for valid hosts
-	allowedHosts []string
+	// Compiled regex rules for valid hosts
+	allowedHosts []*regexp.Regexp
 
 	// List of allowed clients. Allows any if list is empty
 	allowedClients []string
@@ -138,6 +138,15 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		log = cfg.Log
 	}
 
+	allowedHosts := make([]*regexp.Regexp, 0, len(cfg.AllowedHosts))
+	for _, h := range cfg.AllowedHosts {
+		re, err := regexp.Compile(h)
+		if err != nil {
+			return nil, fmt.Errorf("invalid allowedHosts pattern %q: %s", h, err)
+		}
+		allowedHosts = append(allowedHosts, re)
+	}
+
 	s := &Server{
 		pending:               make(map[string]chan net.Conn),
 		sessions:              make(map[string]*yamux.Session),
@@ -151,7 +160,7 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		yamuxConfig:           yamuxConfig,
 		log:                   log,
 		signatureKey:          cfg.SignatureKey,
-		allowedHosts:          cfg.AllowedHosts,
+		allowedHosts:          allowedHosts,
 		allowedClients:        cfg.AllowedClients,
 		controlPath:           cfg.ControlPath,
 		controlMethod:         cfg.ControlMethod,
@@ -388,7 +397,7 @@ func (s *Server) controlHandler(w http.ResponseWriter, r *http.Request) (ctErr e
 	signature := r.Header.Get(proto.ClientIdentifierSignature)
 
 	if !checkIdentifierSignature(identifier, s.signatureKey, signature) {
-		return fmt.Errorf("invalid identity signature", identifier)
+		return fmt.Errorf("invalid identity signature for identifier %s", identifier)
 	}
 
 	_, ok := s.getHost(identifier)
@@ -576,9 +585,10 @@ func (s *Server) changeState(identifier string, state ClientState, err error) (p
 	return prev
 }
 
-// AddHost adds the given virtual host and maps it to the identifier.
-func (s *Server) AddHost(host, identifier string, rewrites []HTTPRewriteRule) {
-	s.virtualHosts.AddHost(host, identifier, rewrites)
+// AddHost adds the given virtual host and maps it to the identifier. It fails if
+// the host is already claimed by another client.
+func (s *Server) AddHost(host, identifier string, rewrites []HTTPRewriteRule) error {
+	return s.virtualHosts.AddHost(host, identifier, rewrites)
 }
 
 // DeleteHost deletes the given virtual host. Once removed any request to this
@@ -691,9 +701,20 @@ func (s *Server) checkConnect(fn func(w http.ResponseWriter, r *http.Request) er
 			return
 		}
 
-		rules := s.convertHTTPPathRules(t)
+		rules, err := s.convertHTTPPathRules(t)
+		if err != nil {
+			s.log.Warn("Rejecting client rewrite rules",
+				zap.String("client_id", identifier), zap.Error(err))
+			http.Error(w, "400 invalid rewrite rule\n", http.StatusBadRequest)
+			return
+		}
 
-		s.AddHost(t.Http.Domain, identifier, rules)
+		if err := s.AddHost(t.Http.Domain, identifier, rules); err != nil {
+			s.log.Warn("Rejecting virtual host request",
+				zap.String("client_id", identifier), zap.String("host", t.Http.Domain), zap.Error(err))
+			http.Error(w, "409 host already in use\n", http.StatusConflict)
+			return
+		}
 
 		if err := fn(w, r); err != nil {
 			s.log.Error("Handler err", zap.Error(err))
@@ -707,13 +728,18 @@ func (s *Server) checkConnect(fn func(w http.ResponseWriter, r *http.Request) er
 	})
 }
 
-// convertHTTPPathRules converts rules received from client to regex rules
-func (s *Server) convertHTTPPathRules(t proto.ConnectionConfig) []HTTPRewriteRule {
-	rules := make([]HTTPRewriteRule, 0)
+// convertHTTPPathRules converts rules received from client to regex rules. The
+// patterns come from the client, so a bad one is a rejected request, not a panic.
+func (s *Server) convertHTTPPathRules(t proto.ConnectionConfig) ([]HTTPRewriteRule, error) {
+	rules := make([]HTTPRewriteRule, 0, len(t.Http.Rewrite))
 	for _, r := range t.Http.Rewrite {
-		rules = append(rules, HTTPRewriteRule{regexp.MustCompile(r.From), r.To})
+		re, err := regexp.Compile(r.From)
+		if err != nil {
+			return nil, fmt.Errorf("invalid rewrite pattern %q: %s", r.From, err)
+		}
+		rules = append(rules, HTTPRewriteRule{re, r.To})
 	}
-	return rules
+	return rules, nil
 }
 
 // checkIdentifier checks if identifier is in the allowed list
@@ -733,8 +759,7 @@ func (s *Server) checkIdentifier(identifier string) bool {
 
 // checkHost verifies that client's desired domain matches at least one of regex rules in allow list
 func (s *Server) checkHost(host string) bool {
-	for _, h := range s.allowedHosts {
-		re := regexp.MustCompile(h)
+	for _, re := range s.allowedHosts {
 		if re.MatchString(host) {
 			return true
 		}

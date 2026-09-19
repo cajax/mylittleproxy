@@ -53,7 +53,10 @@ func main() {
 		ControlPath:    controlPath,
 		ControlMethod:  controlMethod,
 	}
-	server, _ := tunnel.NewServer(cfg)
+	server, err := tunnel.NewServer(cfg)
+	if err != nil {
+		logger.Fatal("unable to initialize tunnel server", zap.Error(err))
+	}
 	logger.Info("Listening", zap.String("control_url", config.Listen+cfg.ControlPath), zap.String("control_method", cfg.ControlMethod))
 	err = http.ListenAndServe(config.Listen, server)
 	if err != nil {
