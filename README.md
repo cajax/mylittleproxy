@@ -63,6 +63,23 @@ You may want to add a wildcard DNS record to automatically catch incoming connec
 #### Run server
 `server -c path/to/config.json` or just `server` if the `config.json` is in the same directory
 
+#### Run the server in Docker
+```
+docker build -t mylittleproxy-server .
+docker run -p 8080:8080 \
+  -v $PWD/config.json:/etc/mylittleproxy/config.json:ro \
+  -e MYLITTLEPROXY_SIGNATURE_KEY=your-secret \
+  mylittleproxy-server
+```
+Settings come from the mounted config file. Leave `signatureKey` empty in it and pass the
+secret as `MYLITTLEPROXY_SIGNATURE_KEY`, so it is not stored alongside the settings.
+
+To start from the sample config in `docker/config.json`:
+```
+MYLITTLEPROXY_SIGNATURE_KEY=$(openssl rand -base64 32) docker compose up --build
+```
+Set `allowedHosts` there to the domains your clients will use.
+
 ## Running the client
 #### Configure client
 ```json

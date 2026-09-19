@@ -1,0 +1,9 @@
+.git
+.github
+.idea
+build
+docker-compose.yml
+Dockerfile
+*.md
+client/config.json
+server/config.json

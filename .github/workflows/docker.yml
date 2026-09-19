@@ -1,0 +1,52 @@
+# Builds the server image so it cannot silently break. Nothing is published:
+# the registry and its credentials are the maintainer's call.
+name: Docker
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build the server image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: false
+        load: true
+        tags: mylittleproxy-server:ci
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Check that it starts and answers
+      run: |
+        docker run -d --name mlp-ci -p 8080:8080 \
+          -v "$PWD/docker/config.json:/etc/mylittleproxy/config.json:ro" \
+          -e MYLITTLEPROXY_SIGNATURE_KEY=ci-test-key \
+          mylittleproxy-server:ci
+
+        # The control path rejects a GET, which proves the server is listening
+        # with the configured control settings.
+        for i in $(seq 1 30); do
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/_controlPath || true)
+          if [ "$code" = "405" ]; then
+            echo "server answered $code"
+            exit 0
+          fi
+          sleep 1
+        done
+
+        echo "server never answered as expected, last code: $code"
+        docker logs mlp-ci
+        exit 1
