@@ -30,5 +30,8 @@ jobs:
           cd ../server
           go build -o ../build/server
 
-    # - name: Test
-    #   run: go test -v build/server server/server.go
+    - name: Vet
+      run: go vet ./...
+
+    - name: Test
+      run: go test ./...
