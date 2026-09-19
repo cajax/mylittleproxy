@@ -100,12 +100,14 @@ Example of config file:
 {
   "debug": true, <-- log debug information to console
   "identifier": "1234", <-- unique client ID. leave empty to use machine(host) ID. If server allow list is not empty then this ID must be present in the list
-  "localAddress": "my.localhost.com:80", <-- host (and port) of target server to which we proxy HTTP calls
   "serverAddress": "localhost:8080", <-- address and port of proxy server
-  "signatureKey": "secretkey", <-- secret key used to sign user identifier
+  "signatureKey": "secretkey", <-- secret key used to sign user identifier. May be set with MYLITTLEPROXY_SIGNATURE_KEY instead
+  "controlPath": "/_controlPath", <-- optional, must match the server
+  "controlMethod": "POST", <-- optional, must match the server
   "proxy": {
     "http": {
       "domain": "1234.domain.com", <-- domain name associated by proxy server to this client
+      "target": "http://my.localhost.com:80", <-- scheme, host and port of the local server requests are proxied to
       "rewrite": [ <-- list of regex rules used to rewrite URLs. It must contain at least one rule like '/' -> '/'
         {
           "from": "/test",<-- you can use regex with matching groups

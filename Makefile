@@ -1,5 +1,5 @@
 build:
-	mkdir build
+	mkdir -p build
 	go mod download
 	go build -o build/server server/server.go
 	go build -o build/client client/client.go
@@ -8,4 +8,4 @@ build:
 
 clean:
 	go clean
-	rm -r build
+	rm -rf build
