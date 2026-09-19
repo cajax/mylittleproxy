@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -147,5 +148,21 @@ func TestClientWebsocketProxyHasALogger(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestHandleWSConnNeedsAHijackableWriter(t *testing.T) {
+	s := testServer(t, &ServerConfig{AllowedHosts: []string{`^.*\.example\.com$`}})
+
+	// httptest.ResponseRecorder does not implement http.Hijacker.
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "http://app.example.com/socket", nil)
+
+	err := s.handleWSConn(w, req, "1234", 0)
+	if err == nil {
+		t.Fatal("no error although the response writer cannot be hijacked")
+	}
+	if !strings.Contains(err.Error(), "hijack") {
+		t.Errorf("error = %v, want it to mention hijacking", err)
 	}
 }

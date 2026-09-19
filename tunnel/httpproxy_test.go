@@ -128,3 +128,91 @@ func TestProxyForwardsQueryToLocalServer(t *testing.T) {
 		t.Errorf("local server saw %q, want %q", gotURI, want)
 	}
 }
+
+func TestProxyAnswersWhenTheRequestCannotBeParsed(t *testing.T) {
+	p := &HTTPProxy{TargetHost: "http://127.0.0.1:1", Log: zap.NewNop()}
+
+	client, remote := net.Pipe()
+	defer client.Close()
+
+	go p.Proxy(remote, &proto.ControlMessage{Action: proto.RequestClientSession, Protocol: proto.HTTP})
+
+	if err := client.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("SetDeadline: %v", err)
+	}
+	if _, err := io.WriteString(client, "this is not an HTTP request\r\n\r\n"); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(client), nil)
+	if err != nil {
+		t.Fatalf("no response came back for an unparsable request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", resp.StatusCode)
+	}
+}
+
+func TestProxyUsesACustomErrorResponse(t *testing.T) {
+	custom := &http.Response{
+		Status:        "418 I'm a teapot",
+		StatusCode:    http.StatusTeapot,
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Body:          io.NopCloser(strings.NewReader("brewing")),
+		ContentLength: 7,
+	}
+
+	p := &HTTPProxy{TargetHost: "http://127.0.0.1:1", ErrorResp: custom, Log: zap.NewNop()}
+
+	client, remote := net.Pipe()
+	defer client.Close()
+
+	go p.Proxy(remote, &proto.ControlMessage{Action: proto.RequestClientSession, Protocol: proto.HTTP})
+
+	if err := client.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("SetDeadline: %v", err)
+	}
+	if _, err := io.WriteString(client, "GET / HTTP/1.1\r\nHost: \r\n\r\n"); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(client), nil)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusTeapot {
+		t.Errorf("status = %d, want the custom response's %d", resp.StatusCode, http.StatusTeapot)
+	}
+}
+
+func TestWSProxyAnswersWhenTheUpgradeCannotBeParsed(t *testing.T) {
+	p := &WSProxy{TargetHost: "http://127.0.0.1:1", Log: zap.NewNop()}
+
+	client, remote := net.Pipe()
+	defer client.Close()
+
+	go p.Proxy(remote, &proto.ControlMessage{Action: proto.RequestClientSession, Protocol: proto.WS})
+
+	if err := client.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("SetDeadline: %v", err)
+	}
+	if _, err := io.WriteString(client, "not an upgrade at all\r\n\r\n"); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(client), nil)
+	if err != nil {
+		t.Fatalf("no response came back for an unparsable upgrade: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", resp.StatusCode)
+	}
+}

@@ -98,26 +98,48 @@ func (p *WSProxy) log() *zap.Logger {
 // dialTarget opens a connection to the local server, with TLS when the target
 // asks for it.
 func dialTarget(target string) (net.Conn, error) {
-	u, err := url.Parse(target)
+	addr, useTLS, err := targetAddress(target)
 	if err != nil {
-		return nil, fmt.Errorf("invalid target %q: %s", target, err)
+		return nil, err
 	}
 
-	host := u.Host
+	if useTLS {
+		return tls.Dial("tcp", addr, nil)
+	}
+
+	return net.Dial("tcp", addr)
+}
+
+// targetAddress turns a target URL into the address to dial, filling in the
+// port its scheme implies, and says whether the connection has to be TLS.
+func targetAddress(target string) (addr string, useTLS bool, err error) {
+	u, err := url.Parse(target)
+	if err != nil {
+		return "", false, fmt.Errorf("invalid target %q: %s", target, err)
+	}
+
 	switch u.Scheme {
 	case "https", "wss":
-		if u.Port() == "" {
-			host = net.JoinHostPort(u.Hostname(), "443")
-		}
-		return tls.Dial("tcp", host, nil)
+		useTLS = true
 	case "http", "ws", "":
-		if u.Port() == "" {
-			host = net.JoinHostPort(u.Hostname(), "80")
-		}
-		return net.Dial("tcp", host)
 	default:
-		return nil, fmt.Errorf("unsupported target scheme %q", u.Scheme)
+		return "", false, fmt.Errorf("unsupported target scheme %q", u.Scheme)
 	}
+
+	if u.Host == "" {
+		return "", false, fmt.Errorf("target %q names no host", target)
+	}
+
+	addr = u.Host
+	if u.Port() == "" {
+		port := "80"
+		if useTLS {
+			port = "443"
+		}
+		addr = net.JoinHostPort(u.Hostname(), port)
+	}
+
+	return addr, useTLS, nil
 }
 
 // hostHeaderFor returns the Host header to send to the local server, keeping

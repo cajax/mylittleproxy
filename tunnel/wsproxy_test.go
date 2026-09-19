@@ -118,3 +118,58 @@ func TestWSProxySetsHostHeaderForLocalServer(t *testing.T) {
 		t.Fatal("the upgrade request never reached the local server")
 	}
 }
+
+// dialTarget verifies certificates, so a local server with a self-signed
+// certificate is refused. That is the behaviour today, not necessarily the one
+// we want for a tool aimed at development boxes: see #42.
+func TestDialTargetVerifiesCertificates(t *testing.T) {
+	local := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer local.Close()
+
+	conn, err := dialTarget(local.URL)
+	if err == nil {
+		conn.Close()
+		t.Fatal("dialTarget accepted a self-signed certificate")
+	}
+	if !strings.Contains(err.Error(), "certificate") && !strings.Contains(err.Error(), "x509") {
+		t.Errorf("error = %v, want a certificate failure", err)
+	}
+}
+
+func TestTargetAddress(t *testing.T) {
+	tests := []struct {
+		target   string
+		wantAddr string
+		wantTLS  bool
+		wantErr  bool
+	}{
+		{target: "http://127.0.0.1:3000", wantAddr: "127.0.0.1:3000"},
+		{target: "http://local.host", wantAddr: "local.host:80"},
+		{target: "https://local.host", wantAddr: "local.host:443", wantTLS: true},
+		{target: "https://local.host:8443", wantAddr: "local.host:8443", wantTLS: true},
+		{target: "ws://local.host", wantAddr: "local.host:80"},
+		{target: "wss://local.host", wantAddr: "local.host:443", wantTLS: true},
+		{target: "//local.host:3000", wantAddr: "local.host:3000"},
+		{target: "ftp://local.host", wantErr: true},
+		{target: "http://[::1", wantErr: true},
+		{target: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.target, func(t *testing.T) {
+			addr, useTLS, err := targetAddress(tt.target)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("targetAddress(%q) error = %v, wantErr %v", tt.target, err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if addr != tt.wantAddr {
+				t.Errorf("address = %q, want %q", addr, tt.wantAddr)
+			}
+			if useTLS != tt.wantTLS {
+				t.Errorf("useTLS = %v, want %v", useTLS, tt.wantTLS)
+			}
+		})
+	}
+}
