@@ -111,10 +111,15 @@ func (p *HTTPProxy) sendError(remote net.Conn) {
 		w = p.ErrorResp
 	}
 
+	sendErrorResponse(remote, w, p.log())
+}
+
+// sendErrorResponse writes an in-memory response into the tunnel and closes it.
+func sendErrorResponse(remote net.Conn, resp *http.Response, log *zap.Logger) {
 	buf := new(bytes.Buffer)
-	w.Write(buf)
+	resp.Write(buf)
 	if _, err := io.Copy(remote, buf); err != nil {
-		p.log().Debug("Copy in-mem response error", zap.Error(err))
+		log.Debug("Copy in-mem response error", zap.Error(err))
 	}
 
 	remote.Close()

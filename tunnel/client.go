@@ -214,7 +214,7 @@ func NewClient(cfg *ClientConfig) (*Client, error) {
 
 	var f ProxyFuncs
 	f.HTTP = (&HTTPProxy{TargetHost: cfg.ConnectionConfig.Http.Target, Log: cfg.Log}).Proxy
-	f.WS = (&HTTPProxy{TargetHost: cfg.ConnectionConfig.Http.Target, Log: cfg.Log}).Proxy
+	f.WS = (&WSProxy{TargetHost: cfg.ConnectionConfig.Http.Target, Log: cfg.Log}).Proxy
 	proxy := Proxy(f)
 
 	var bo Backoff = newForeverBackoff()
