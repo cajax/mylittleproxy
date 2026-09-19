@@ -191,3 +191,57 @@ func TestFunctionalConcurrentRequests(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestFunctionalCustomHeadersReachTheLocalServer(t *testing.T) {
+	seen := make(chan http.Header, 1)
+
+	f := newFixture(t, fixtureConfig{
+		customHeaders: map[string]string{
+			"X-Api-Key": "abc123",
+			"X-Env":     "preprod",
+		},
+		handler: func(w http.ResponseWriter, r *http.Request) {
+			seen <- r.Header.Clone()
+		},
+	})
+
+	resp := f.Do(http.MethodGet, "/", "")
+	resp.Body.Close()
+
+	headers := <-seen
+	if got := headers.Get("X-Api-Key"); got != "abc123" {
+		t.Errorf("X-Api-Key = %q, want %q", got, "abc123")
+	}
+	if got := headers.Get("X-Env"); got != "preprod" {
+		t.Errorf("X-Env = %q, want %q", got, "preprod")
+	}
+}
+
+func TestFunctionalCustomHeadersOverwriteWhatTheCallerSent(t *testing.T) {
+	seen := make(chan http.Header, 1)
+
+	f := newFixture(t, fixtureConfig{
+		customHeaders: map[string]string{"X-Env": "preprod"},
+		handler: func(w http.ResponseWriter, r *http.Request) {
+			seen <- r.Header.Clone()
+		},
+	})
+
+	req, err := http.NewRequest(http.MethodGet, f.Tunnel.URL+"/", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Host = f.domain
+	req.Header.Set("X-Env", "spoofed-by-the-caller")
+
+	resp, err := (&http.Client{Timeout: functionalTimeout}).Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	resp.Body.Close()
+
+	headers := <-seen
+	if got := headers.Values("X-Env"); len(got) != 1 || got[0] != "preprod" {
+		t.Errorf("X-Env = %v, want exactly [preprod]: the caller's value survived", got)
+	}
+}

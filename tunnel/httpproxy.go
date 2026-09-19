@@ -21,6 +21,10 @@ type HTTPProxy struct {
 	// This is optional if you want to specify a single TCP address.
 	TargetHost string
 
+	// CustomHeaders are set on the request before it is sent to the local
+	// server, replacing what the caller sent under the same name.
+	CustomHeaders map[string]string
+
 	// ErrorResp is custom response send to tunnel server when client cannot
 	// establish connection to local server. If not set a default "no local server"
 	// response is sent.
@@ -96,6 +100,8 @@ func (p *HTTPProxy) patchRequest(req *http.Request) error {
 	// The Host header follows req.URL.Host, the server having cleared req.Host
 	// when it rewrote the request.
 	req.Host = ""
+
+	applyCustomHeaders(req, p.CustomHeaders)
 
 	return nil
 }

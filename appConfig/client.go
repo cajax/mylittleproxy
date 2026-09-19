@@ -15,9 +15,10 @@ type Proxy struct {
 }
 
 type HTTPConfig struct {
-	Domain  string            `json:"domain"`
-	Target  string            `json:"target"`
-	Rewrite []HTTPRewriteRule `json:"rewrite"`
+	Domain        string            `json:"domain"`
+	Target        string            `json:"target"`
+	Rewrite       []HTTPRewriteRule `json:"rewrite"`
+	CustomHeaders map[string]string `json:"customHeaders"`
 }
 
 type HTTPRewriteRule struct {
