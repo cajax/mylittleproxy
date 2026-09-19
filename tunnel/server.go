@@ -25,8 +25,18 @@ import (
 
 var (
 	errNoClientSession = errors.New("no client session established")
-	defaultTimeout     = 10 * time.Second
+
+	// errAfterHijack marks a failure that happened once the control connection
+	// was hijacked, when no HTTP response can be written any more.
+	errAfterHijack = errors.New("control connection already hijacked")
+
+	defaultTimeout = 10 * time.Second
 )
+
+// afterHijack marks err as raised after the connection was hijacked.
+func afterHijack(err error) error {
+	return fmt.Errorf("%w: %s", errAfterHijack, err)
+}
 
 // Server is responsible for proxying public connections to the client over a
 // tunnel connection. It also listens to control messages from the client.
@@ -144,6 +154,11 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid allowedHosts pattern %q: %s", h, err)
 		}
+		if !strings.HasPrefix(h, "^") && !strings.HasSuffix(h, "$") {
+			log.Warn("allowedHosts pattern is not anchored, so it matches anywhere in a host name. Add ^ and $ unless a substring match is intended",
+				zap.String("pattern", h))
+		}
+
 		allowedHosts = append(allowedHosts, re)
 	}
 
@@ -426,18 +441,20 @@ func (s *Server) controlHandler(w http.ResponseWriter, r *http.Request) (ctErr e
 		return fmt.Errorf("hijack not possible: %s", err)
 	}
 
+	// From here on the connection is hijacked: failures can no longer be
+	// reported over HTTP, they close the connection instead.
 	if _, err := io.WriteString(conn, "HTTP/1.1 "+proto.Connected+"\n\n"); err != nil {
-		return fmt.Errorf("error writing response: %s", err)
+		return afterHijack(fmt.Errorf("error writing response: %s", err))
 	}
 
 	if err := conn.SetDeadline(time.Time{}); err != nil {
-		return fmt.Errorf("error setting connection deadline: %s", err)
+		return afterHijack(fmt.Errorf("error setting connection deadline: %s", err))
 	}
 
 	s.log.Debug("Creating control session", zap.String("client_id", identifier))
 	session, err := yamux.Server(conn, s.yamuxConfig)
 	if err != nil {
-		return err
+		return afterHijack(err)
 	}
 	s.addSession(identifier, session)
 
@@ -450,6 +467,7 @@ func (s *Server) controlHandler(w http.ResponseWriter, r *http.Request) (ctErr e
 				stream.Close()
 			}
 			s.deleteSession(identifier)
+			conn.Close()
 		}
 	}()
 
@@ -462,24 +480,24 @@ func (s *Server) controlHandler(w http.ResponseWriter, r *http.Request) (ctErr e
 	select {
 	case err := <-async(acceptStream):
 		if err != nil {
-			return err
+			return afterHijack(err)
 		}
-	case <-time.After(time.Second * 10):
-		return errors.New("timeout getting session")
+	case <-time.After(defaultTimeout):
+		return afterHijack(errors.New("timeout getting session"))
 	}
 
 	s.log.Debug("Initiating handshake protocol", zap.String("client_id", identifier))
 	buf := make([]byte, len(proto.HandshakeRequest))
 	if _, err := stream.Read(buf); err != nil {
-		return err
+		return afterHijack(err)
 	}
 
 	if string(buf) != proto.HandshakeRequest {
-		return fmt.Errorf("handshake aborted. got: %s", string(buf))
+		return afterHijack(fmt.Errorf("handshake aborted. got: %s", string(buf)))
 	}
 
 	if _, err := stream.Write([]byte(proto.HandshakeResponse)); err != nil {
-		return err
+		return afterHijack(err)
 	}
 
 	// setup control stream and start to listen to messages
@@ -723,7 +741,11 @@ func (s *Server) checkConnect(fn func(w http.ResponseWriter, r *http.Request) er
 				s.onDisconnect(identifier, err)
 			}
 
-			http.Error(w, err.Error(), 502)
+			// After a hijack the ResponseWriter is dead; the handler has closed
+			// the raw connection instead.
+			if !errors.Is(err, errAfterHijack) {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+			}
 		}
 	})
 }
