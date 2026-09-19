@@ -31,22 +31,34 @@ jobs:
 
     - name: Check that it starts and answers
       run: |
-        docker run -d --name mlp-ci -p 8080:8080 \
+        docker run -d --name mlp-ci -p 8080:8080 -p 8081:8081 \
           -v "$PWD/docker/config.json:/etc/mylittleproxy/config.json:ro" \
           -e MYLITTLEPROXY_SIGNATURE_KEY=ci-test-key \
           mylittleproxy-server:ci
 
-        # The control path rejects a GET, which proves the server is listening
-        # with the configured control settings.
+        # The control listener rejects a GET, which proves it is up with the
+        # configured control settings.
         for i in $(seq 1 30); do
-          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/_controlPath || true)
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/_controlPath || true)
           if [ "$code" = "405" ]; then
-            echo "server answered $code"
-            exit 0
+            break
           fi
           sleep 1
         done
 
-        echo "server never answered as expected, last code: $code"
-        docker logs mlp-ci
-        exit 1
+        if [ "$code" != "405" ]; then
+          echo "the control listener never answered as expected, last code: $code"
+          docker logs mlp-ci
+          exit 1
+        fi
+
+        # The same path on the public listener is ordinary traffic, so it finds
+        # no virtual host rather than serving the control protocol.
+        public=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/_controlPath || true)
+        if [ "$public" = "405" ]; then
+          echo "the control protocol is reachable on the public listener"
+          docker logs mlp-ci
+          exit 1
+        fi
+
+        echo "control listener answered $code, public listener answered $public"

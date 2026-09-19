@@ -79,9 +79,24 @@ func main() {
 	if err != nil {
 		logger.Fatal("unable to initialize tunnel server", zap.Error(err))
 	}
-	logger.Info("Listening", zap.String("control_url", config.Listen+cfg.ControlPath), zap.String("control_method", cfg.ControlMethod))
-	err = newHTTPServer(config.Listen, server).ListenAndServe()
-	if err != nil {
+
+	if err := checkListenAddresses(config.Listen, config.ListenControl); err != nil {
+		logger.Fatal("invalid listen configuration", zap.Error(err))
+	}
+
+	controlAddress := config.ListenControl
+	if controlAddress == "" {
+		controlAddress = config.Listen
+		logger.Warn("The control protocol is served on the public listener. Set listenControl to a private address to keep it off the public network",
+			zap.String("listen", config.Listen))
+	}
+
+	logger.Info("Listening",
+		zap.String("public_address", config.Listen),
+		zap.String("control_url", controlAddress+cfg.ControlPath),
+		zap.String("control_method", cfg.ControlMethod))
+
+	if err := serve(config.Listen, config.ListenControl, server); err != nil {
 		logger.Fatal("unable to start http server", zap.Error(err))
 	}
 }

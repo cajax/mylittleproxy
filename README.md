@@ -45,6 +45,7 @@ You may want to add a wildcard DNS record to automatically catch incoming connec
 {
   "debug": true,
   "listen": ":8080",
+  "listenControl": "127.0.0.1:8081",
   "signatureKey": "secretkey",
   "allowedHosts": ["^.*\\.your-public-domain\\.com$"],
   "allowedClients": ["1234"],
@@ -53,7 +54,8 @@ You may want to add a wildcard DNS record to automatically catch incoming connec
 }
 ```
 * `debug` Enable more human-readable log format
-* `listen` IP and port to listen to for incoming connections. This includes both control connections from clients and requests from the Web thus needs to be allowed by firewall
+* `listen` IP and port for requests from the Web. This one needs to be allowed by the firewall
+* `listenControl` IP and port for control connections from clients, served separately from web traffic. Recommended: point it at an address the public cannot reach, such as a private interface or a VPN, and clients connect there instead of to `listen`. Leave it out and both share `listen`, which exposes the control protocol to anyone who can reach the server
 * `signatureKey` A secret key you share between server and clients. Client will use it to sign identifier while communicating with server
 * `allowedHosts` List of regex rules to filter allowed domains names. If requested URL didn't match any it will fail with `error 400`
 * `allowedClient` List of client IDs allowed to use this server. If this list is empty then any client with valid signature will be allowed to connect
@@ -66,13 +68,15 @@ You may want to add a wildcard DNS record to automatically catch incoming connec
 #### Run the server in Docker
 ```
 docker build -t mylittleproxy-server .
-docker run -p 8080:8080 \
+docker run -p 8080:8080 -p 127.0.0.1:8081:8081 \
   -v $PWD/config.json:/etc/mylittleproxy/config.json:ro \
   -e MYLITTLEPROXY_SIGNATURE_KEY=your-secret \
   mylittleproxy-server
 ```
 Settings come from the mounted config file. Leave `signatureKey` empty in it and pass the
 secret as `MYLITTLEPROXY_SIGNATURE_KEY`, so it is not stored alongside the settings.
+
+Web traffic arrives on 8080 and clients connect on 8081, published to the host only.
 
 To start from the sample config in `docker/config.json`:
 ```

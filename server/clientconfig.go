@@ -37,7 +37,14 @@ const defaultGeneratedTarget = "http://127.0.0.1:8080"
 func buildClientConfig(server appConfig.Server, opts clientConfigOptions) (appConfig.Client, error) {
 	var client appConfig.Client
 
-	address, err := clientFacingAddress(server.Listen, opts.address)
+	// Clients dial the control listener, which is a different address when the
+	// two are separated.
+	listen := server.Listen
+	if server.ListenControl != "" {
+		listen = server.ListenControl
+	}
+
+	address, err := clientFacingAddress(listen, opts.address)
 	if err != nil {
 		return client, err
 	}

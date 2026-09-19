@@ -7,7 +7,11 @@ services:
   server:
     build: .
     ports:
+      # Web traffic.
       - "8080:8080"
+      # Control protocol, published to the host only. Clients connect here; keep
+      # it off the public network.
+      - "127.0.0.1:8081:8081"
     environment:
       # Left out of the config file on purpose, so the secret is not written to
       # disk next to the settings.
