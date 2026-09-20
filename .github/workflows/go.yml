@@ -35,3 +35,21 @@ jobs:
 
     - name: Test
       run: go test ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    # golangci-lint needs a newer toolchain than the one the module targets.
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+
+    - name: Lint
+      uses: golangci/golangci-lint-action@v8
+      with:
+        # Pinned: a new release enabling more checks should be a deliberate
+        # change, not a build that breaks on its own.
+        version: v2.13.2

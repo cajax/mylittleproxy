@@ -39,11 +39,6 @@ func afterHijack(err error) error {
 // Server is responsible for proxying public connections to the client over a
 // tunnel connection. It also listens to control messages from the client.
 type Server struct {
-	// pending contains the channel that is associated with each new tunnel request.
-	pending map[string]chan net.Conn
-	// pendingMu protects the pending map.
-	pendingMu sync.Mutex
-
 	// sessions contains a session per virtual host.
 	// Sessions provides multiplexing over one connection.
 	sessions map[string]*yamux.Session
@@ -161,7 +156,6 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 	}
 
 	s := &Server{
-		pending:               make(map[string]chan net.Conn),
 		sessions:              make(map[string]*yamux.Session),
 		onConnectCallbacks:    newCallbacks("OnConnect"),
 		onDisconnectCallbacks: newCallbacks("OnDisconnect"),
@@ -255,7 +249,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) error {
 
 	if !s.rewriteRequest(r, identifier) {
 		http.Error(w, "403 Forbidden", http.StatusForbidden)
-		return errors.New("No matching rule")
+		return errors.New("no matching rewrite rule")
 	}
 
 	if isWebsocketConn(r) {
@@ -449,7 +443,7 @@ func (s *Server) controlHandler(w http.ResponseWriter, r *http.Request) (ctErr e
 		s.deleteControl(identifier)
 		s.deleteSession(identifier)
 		s.log.Warn("Control connection already exists. This is a race condition and needs to be fixed on client implementation", zap.String("client_id", identifier))
-		return fmt.Errorf("control conn for %s already exist. \n", identifier)
+		return fmt.Errorf("control connection for %s already exists", identifier)
 	}
 
 	s.log.Debug("New Client connection", zap.String("client_id", identifier), zap.String("remote_address", r.RemoteAddr))
@@ -689,7 +683,8 @@ func (s *Server) deleteSession(identifier string) {
 	}
 
 	if session != nil {
-		session.GoAway() // don't accept any new connection
+		// Stop accepting new connections, then drop the session.
+		session.GoAway()
 		session.Close()
 	}
 
