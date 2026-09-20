@@ -62,6 +62,16 @@ You may want to add a wildcard DNS record to automatically catch incoming connec
 * `controlPath` Use custom path for control protocol if default (`/_controlPath`) interferes with your needs. Leave empty or remove from config to use default value
 * `controlMethod` Custom HTTP method of control call. The default is `POST`.
 
+Every setting can also come from the environment, which takes precedence over the file:
+`MYLITTLEPROXY_DEBUG`, `MYLITTLEPROXY_LISTEN`, `MYLITTLEPROXY_LISTEN_CONTROL`,
+`MYLITTLEPROXY_SIGNATURE_KEY`, `MYLITTLEPROXY_ALLOWED_HOSTS`,
+`MYLITTLEPROXY_ALLOWED_CLIENTS`, `MYLITTLEPROXY_CONTROL_PATH`,
+`MYLITTLEPROXY_CONTROL_METHOD`. The two list values are comma separated, or a JSON array
+when a pattern itself contains a comma: `["^a{1,3}\\.example\\.com$"]`.
+
+The config file is optional when `listen`, `signatureKey` and `allowedHosts` all come from
+the environment.
+
 #### Run server
 `server -c path/to/config.json` or just `server` if the `config.json` is in the same directory
 
@@ -69,14 +79,17 @@ You may want to add a wildcard DNS record to automatically catch incoming connec
 ```
 docker build -t mylittleproxy-server .
 docker run -p 8080:8080 -p 127.0.0.1:8081:8081 \
-  -v $PWD/config.json:/etc/mylittleproxy/config.json:ro \
+  -e MYLITTLEPROXY_LISTEN=:8080 \
+  -e MYLITTLEPROXY_LISTEN_CONTROL=:8081 \
+  -e 'MYLITTLEPROXY_ALLOWED_HOSTS=^.*\.example\.com$' \
   -e MYLITTLEPROXY_SIGNATURE_KEY=your-secret \
   mylittleproxy-server
 ```
-Settings come from the mounted config file. Leave `signatureKey` empty in it and pass the
-secret as `MYLITTLEPROXY_SIGNATURE_KEY`, so it is not stored alongside the settings.
-
 Web traffic arrives on 8080 and clients connect on 8081, published to the host only.
+
+To use a config file instead, mount one at `/etc/mylittleproxy/config.json` and keep
+`MYLITTLEPROXY_SIGNATURE_KEY` in the environment so the secret is not stored alongside the
+settings.
 
 To start from the sample config in `docker/config.json`:
 ```

@@ -29,7 +29,7 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Check that it starts and answers
+    - name: Check that it starts from a mounted config file
       run: |
         docker run -d --name mlp-ci -p 8080:8080 -p 8081:8081 \
           -v "$PWD/docker/config.json:/etc/mylittleproxy/config.json:ro" \
@@ -62,3 +62,28 @@ jobs:
         fi
 
         echo "control listener answered $code, public listener answered $public"
+
+    - name: Check that it starts from the environment alone
+      run: |
+        docker rm -f mlp-ci
+
+        # No config file mounted: everything comes from the environment.
+        docker run -d --name mlp-env -p 8080:8080 -p 8081:8081 \
+          -e MYLITTLEPROXY_LISTEN=:8080 \
+          -e MYLITTLEPROXY_LISTEN_CONTROL=:8081 \
+          -e 'MYLITTLEPROXY_ALLOWED_HOSTS=^.*\.example\.com$' \
+          -e MYLITTLEPROXY_SIGNATURE_KEY=ci-test-key \
+          mylittleproxy-server:ci
+
+        for i in $(seq 1 30); do
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/_controlPath || true)
+          if [ "$code" = "405" ]; then
+            echo "the control listener answered $code with no config file"
+            exit 0
+          fi
+          sleep 1
+        done
+
+        echo "the server did not start from the environment, last code: $code"
+        docker logs mlp-env
+        exit 1
