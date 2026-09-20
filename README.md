@@ -1,4 +1,4 @@
-# MyLittleProxy [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](http://godoc.org/github.com/cajax/mylittleproxy) [![Go Report Card](https://goreportcard.com/badge/github.com/cajax/mylittleproxy)](https://goreportcard.com/report/github.com/cajax/mylittleproxy)
+# MyLittleProxy [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](https://pkg.go.dev/github.com/cajax/mylittleproxy)
 
 MyLittleProxy is a reverse proxy for cases where you cannot or do not want to expose entire development or testing environment to extranet, but also need to test an endpoint or single page.
 
