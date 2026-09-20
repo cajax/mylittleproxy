@@ -14,21 +14,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: '1.20'
-    - name: Install dependencies
-      run: go mod download
 
+    # Through the Makefile, so the build recipe people actually run is the one
+    # that is tested.
     - name: Build
-      run: |
-          cd client
-          go build -o ../build/client
-          cd ../server
-          go build -o ../build/server
+      run: make build
 
     - name: Vet
       run: go vet ./...

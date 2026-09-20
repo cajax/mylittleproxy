@@ -70,7 +70,7 @@ func TestHostHeaderFor(t *testing.T) {
 }
 
 func TestWSProxyRefusesWrongProtocol(t *testing.T) {
-	client, remote := net.Pipe()
+	client, remote := deadlinedPipe(t)
 	defer client.Close()
 
 	p := &WSProxy{TargetHost: "http://127.0.0.1:1"}

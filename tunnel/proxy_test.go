@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -15,12 +16,17 @@ import (
 
 // readAll drains conn until it is closed, so a test can tell "closed without a
 // reply" from "replied".
+//
+// The deadline is best effort: net.Pipe refuses to set one once either end is
+// closed, and these tests are about the proxy closing its end, so losing that
+// race is not a failure. Callers set a deadline when they create the pipe.
 func readAll(t *testing.T, conn net.Conn) string {
 	t.Helper()
 
-	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil && !errors.Is(err, io.ErrClosedPipe) {
 		t.Fatalf("SetDeadline: %v", err)
 	}
+
 	b, err := io.ReadAll(conn)
 	if err != nil {
 		t.Fatalf("read: %v", err)
@@ -28,8 +34,21 @@ func readAll(t *testing.T, conn net.Conn) string {
 	return string(b)
 }
 
+// deadlinedPipe returns a pipe whose client end already has a deadline, set
+// before anything can close the other end.
+func deadlinedPipe(t *testing.T) (client, remote net.Conn) {
+	t.Helper()
+
+	client, remote = net.Pipe()
+	if err := client.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("SetDeadline: %v", err)
+	}
+
+	return client, remote
+}
+
 func TestProxyClosesConnectionForUnknownProtocol(t *testing.T) {
-	client, remote := net.Pipe()
+	client, remote := deadlinedPipe(t)
 	defer client.Close()
 
 	done := make(chan struct{})
@@ -55,7 +74,7 @@ func TestProxyClosesConnectionForUnknownProtocol(t *testing.T) {
 }
 
 func TestProxyForTCPWithoutImplementationDoesNotPanic(t *testing.T) {
-	client, remote := net.Pipe()
+	client, remote := deadlinedPipe(t)
 	defer client.Close()
 
 	done := make(chan struct{})
