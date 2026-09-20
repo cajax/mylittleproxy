@@ -11,7 +11,8 @@ const (
 	// ClientIdentifierHeader is a header carrying information about tunnel identifier.
 	ClientIdentifierHeader = "X-Tunnel-Identifier"
 
-	// ClientIdentifierSignature is a header carrying salted SHA-1 hash of ClientIdentifierHeader
+	// ClientIdentifierSignature is a header carrying the HMAC-SHA256 of
+	// ClientIdentifierHeader, keyed with the shared signature key.
 	ClientIdentifierSignature = "X-Tunnel-Signature"
 
 	// control messages

@@ -2,7 +2,7 @@ package tunnel
 
 import (
 	"crypto/hmac"
-	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
@@ -125,11 +125,16 @@ func scheme(conn net.Conn) (scheme string) {
 	return
 }
 
+// signIdentifier signs a client identifier with the shared key. The result
+// travels in a header, so it is base64 in the URL alphabet.
+//
+// This is the wire format between server and client: changing it means both
+// sides have to be upgraded together.
 func signIdentifier(id string, key string) string {
-	// TODO replace with asymmetric encryption
-	sha := sha1.New()
-	sha.Write([]byte(id + ":" + key))
-	return base64.URLEncoding.EncodeToString(sha.Sum(nil))
+	mac := hmac.New(sha256.New, []byte(key))
+	mac.Write([]byte(id))
+
+	return base64.URLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 func checkIdentifierSignature(id string, key string, signature string) bool {
