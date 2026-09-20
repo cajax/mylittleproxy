@@ -38,6 +38,8 @@ type fixtureConfig struct {
 	identifier string
 	rewrites   []proto.HTTPRewriteRule
 	handler    http.HandlerFunc
+	// customHeaders the client sets on requests to the local server.
+	customHeaders map[string]string
 
 	allowedHosts   []string
 	allowedClients []string
@@ -103,7 +105,9 @@ func newFixture(t *testing.T, cfg fixtureConfig) *fixture {
 		target = f.Local.URL
 	}
 
-	f.Client = f.startClient(cfg.identifier, cfg.domain, target, cfg.rewrites)
+	f.Client = f.startClientWith(func(c *ClientConfig) {
+		c.CustomHeaders = cfg.customHeaders
+	}, cfg.identifier, cfg.domain, target, cfg.rewrites)
 	f.waitConnected(f.Client)
 
 	return f

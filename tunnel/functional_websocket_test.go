@@ -243,3 +243,30 @@ func TestFunctionalWebsocketLocalServerDown(t *testing.T) {
 		t.Errorf("status = %d, want 503", resp.StatusCode)
 	}
 }
+
+func TestFunctionalCustomHeadersReachTheUpgrade(t *testing.T) {
+	upgrader := websocket.Upgrader{}
+	seen := make(chan http.Header, 1)
+
+	f := newFixture(t, fixtureConfig{
+		customHeaders: map[string]string{"X-Api-Key": "abc123"},
+		handler: func(w http.ResponseWriter, r *http.Request) {
+			seen <- r.Header.Clone()
+
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				t.Errorf("upgrade on the local server: %v", err)
+				return
+			}
+			conn.Close()
+		},
+	})
+
+	conn := f.dialWebsocket("/socket")
+	defer conn.Close()
+
+	headers := <-seen
+	if got := headers.Get("X-Api-Key"); got != "abc123" {
+		t.Errorf("X-Api-Key on the upgrade = %q, want %q", got, "abc123")
+	}
+}

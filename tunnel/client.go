@@ -172,6 +172,12 @@ type ClientConfig struct {
 	// TODO separate proto and client config types. Fill proto from config upon creation
 	ConnectionConfig proto.ConnectionConfig
 
+	// CustomHeaders are set on every request on its way to the local server,
+	// replacing what the caller sent under the same name. They stay on this
+	// side of the tunnel: they are not part of ConnectionConfig and are never
+	// sent to the tunnel server.
+	CustomHeaders map[string]string
+
 	// Custom control path
 	ControlPath string
 
@@ -195,7 +201,7 @@ func (c *ClientConfig) verify() error {
 		}
 	}
 
-	return nil
+	return validateCustomHeaders(c.CustomHeaders)
 }
 
 // NewClient creates a new tunnel that is established between the serverAddr
@@ -214,8 +220,16 @@ func NewClient(cfg *ClientConfig) (*Client, error) {
 
 	var f ProxyFuncs
 	f.Log = cfg.Log
-	f.HTTP = (&HTTPProxy{TargetHost: cfg.ConnectionConfig.Http.Target, Log: cfg.Log}).Proxy
-	f.WS = (&WSProxy{TargetHost: cfg.ConnectionConfig.Http.Target, Log: cfg.Log}).Proxy
+	f.HTTP = (&HTTPProxy{
+		TargetHost:    cfg.ConnectionConfig.Http.Target,
+		CustomHeaders: cfg.CustomHeaders,
+		Log:           cfg.Log,
+	}).Proxy
+	f.WS = (&WSProxy{
+		TargetHost:    cfg.ConnectionConfig.Http.Target,
+		CustomHeaders: cfg.CustomHeaders,
+		Log:           cfg.Log,
+	}).Proxy
 	proxy := Proxy(f)
 
 	var bo Backoff = newForeverBackoff()

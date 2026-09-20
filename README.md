@@ -94,6 +94,9 @@ Set `allowedHosts` there to the domains your clients will use.
     "http": {
       "domain": "1234.domain.com",
       "target": "https://local.host",
+      "customHeaders": {
+        "X-Api-Key": "abc123"
+      },
       "rewrite": [
         {
           "from": "/test",
@@ -112,6 +115,7 @@ Set `allowedHosts` there to the domains your clients will use.
 * `controlMethod` Custom HTTP method of control call. The default is `POST`. This field is optional but must match the same of server config
 * `proxy.http.domain` Is the desired domain at the server side that will be routed to this client
 * `proxy.http.target` Is the target host protocol and port. Requests will be routed to this host
+* `proxy.http.customHeaders` Headers set on every request and websocket upgrade sent to the target, replacing any the caller sent under the same name. Optional. Values stay on the client and are never sent to the proxy server, so they may hold credentials the target needs.
 * `proxy.http.rewrite` list of Regex expressions to rewrite paths in URLs. This list must contain at least one entry and may be as simple as a pair `/ -> /` but then you risk to expose entire local web server. Only requests with matched path will be routed to client. You may use RegEx capture groups and replacements (e.g. `$1`).
 
 #### Run

@@ -76,8 +76,9 @@ func getTunnelConfig(identifier string, config appConfig.Client, httpRewrites []
 	}
 
 	cfg := &tunnel.ClientConfig{
-		Identifier: identifier,
-		ServerAddr: config.ServerAddress,
+		Identifier:    identifier,
+		CustomHeaders: config.Proxy.Http.CustomHeaders,
+		ServerAddr:    config.ServerAddress,
 		ConnectionConfig: proto.ConnectionConfig{
 			Http: proto.HTTPConfig{
 				Domain:  config.Proxy.Http.Domain,

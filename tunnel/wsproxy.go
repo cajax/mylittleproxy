@@ -28,6 +28,10 @@ type WSProxy struct {
 	// TargetHost defines the address of the local server.
 	TargetHost string
 
+	// CustomHeaders are set on the upgrade request before it is sent to the
+	// local server, replacing what the caller sent under the same name.
+	CustomHeaders map[string]string
+
 	// Log is a custom logger that can be used for the proxy. If not set,
 	// nothing is logged.
 	Log *zap.Logger
@@ -63,6 +67,8 @@ func (p *WSProxy) Proxy(remote net.Conn, msg *proto.ControlMessage) {
 	// The tunnel server clears Host when it rewrites the request, but the local
 	// server needs one to accept the upgrade.
 	req.Host = hostHeaderFor(p.TargetHost, req.Host)
+
+	applyCustomHeaders(req, p.CustomHeaders)
 
 	if err := req.Write(local); err != nil {
 		p.log().Warn("Failed to write upgrade request to local server",

@@ -9,6 +9,9 @@
     "http": {
       "domain": "1234.domain.com",
       "target": "https://localhost",
+      "customHeaders": {
+        "X-Api-Key": "abc123"
+      },
       "rewrite": [
         {
           "from": "/test",

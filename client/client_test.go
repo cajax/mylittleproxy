@@ -101,3 +101,20 @@ func TestGetTunnelConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestGetTunnelConfigCarriesCustomHeaders(t *testing.T) {
+	config := appConfig.Client{
+		ServerAddress: "proxy.example.com:8080",
+		Proxy: appConfig.Proxy{Http: appConfig.HTTPConfig{
+			Domain:        "app.example.com",
+			Target:        "http://127.0.0.1:3000",
+			CustomHeaders: map[string]string{"X-Api-Key": "abc123"},
+		}},
+	}
+
+	got := getTunnelConfig("1234", config, nil, "secret", zap.NewNop())
+
+	if got.CustomHeaders["X-Api-Key"] != "abc123" {
+		t.Errorf("CustomHeaders = %v, want the config's", got.CustomHeaders)
+	}
+}
