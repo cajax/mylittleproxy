@@ -1,8 +1,8 @@
 # Quick start:
 #   MYLITTLEPROXY_SIGNATURE_KEY=$(openssl rand -base64 32) docker compose up --build
 #
-# Edit docker/config.json first: allowedHosts has to match the domains your
-# clients will ask for.
+# The whole configuration is here, so no config file is mounted. Set
+# MYLITTLEPROXY_ALLOWED_HOSTS to the domains your clients will ask for.
 services:
   server:
     build: .
@@ -13,9 +13,8 @@ services:
       # it off the public network.
       - "127.0.0.1:8081:8081"
     environment:
-      # Left out of the config file on purpose, so the secret is not written to
-      # disk next to the settings.
+      MYLITTLEPROXY_LISTEN: ":8080"
+      MYLITTLEPROXY_LISTEN_CONTROL: ":8081"
+      MYLITTLEPROXY_ALLOWED_HOSTS: '^.*\.example\.com$$'
       MYLITTLEPROXY_SIGNATURE_KEY: ${MYLITTLEPROXY_SIGNATURE_KEY:?set MYLITTLEPROXY_SIGNATURE_KEY}
-    volumes:
-      - ./docker/config.json:/etc/mylittleproxy/config.json:ro
     restart: unless-stopped

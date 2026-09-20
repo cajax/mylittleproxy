@@ -2,8 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"github.com/cajax/mylittleproxy/appConfig"
 	"github.com/cajax/mylittleproxy/proto"
 	"github.com/cajax/mylittleproxy/tunnel"
 	"go.uber.org/zap"
@@ -29,11 +27,10 @@ func main() {
 	flag.BoolVar(&genOpts.debug, "client-debug", false, "Set debug in the generated client config")
 
 	flag.Parse()
-	var config appConfig.Server
-	err := tunnel.GetConfig(configPath, &config)
 
+	config, err := loadConfig(*configPath)
 	if err != nil {
-		log.Printf("Unable to read config: %s", err)
+		log.Printf("Unable to read configuration: %s", err)
 		os.Exit(1)
 	}
 
@@ -53,9 +50,7 @@ func main() {
 	}
 	defer logger.Sync()
 
-	fmt.Println("Running server with ", *configPath)
-
-	signatureKey := getSignatureKey(config, logger)
+	signatureKey := config.SignatureKey
 
 	controlPath := proto.DefaultControlPath
 	if config.ControlPath != "" {
@@ -118,16 +113,4 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 	}
-}
-
-func getSignatureKey(config appConfig.Server, logger *zap.Logger) string {
-	signatureKey := config.SignatureKey
-	if signatureKey == "" {
-		signatureKey = os.Getenv("MYLITTLEPROXY_SIGNATURE_KEY")
-	}
-	if signatureKey == "" {
-		logger.Error("signature key must no be empty. Aborting")
-		os.Exit(1)
-	}
-	return signatureKey
 }
