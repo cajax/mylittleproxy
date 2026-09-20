@@ -8,6 +8,10 @@ on:
   pull_request:
     branches: [ "master" ]
 
+# The jobs only read the repository.
+permissions:
+  contents: read
+
 jobs:
 
   build:

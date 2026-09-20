@@ -1,0 +1,30 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+  exclusions:
+    rules:
+      # Closing a connection or flushing a logger on the way out has nothing
+      # useful to do with the error, and reporting every one of them buries the
+      # calls that do.
+      - linters:
+          - errcheck
+        source: '^\s*defer '
+
+      # Same for shutting down a connection or session that is being abandoned:
+      # the failure being handled is the interesting one, not the close.
+      - linters:
+          - errcheck
+        source: '\.(Close|GoAway)\(\)$'
+
+      # A test that cannot write its own response fails on the assertion that
+      # follows.
+      - path: _test\.go
+        linters:
+          - errcheck

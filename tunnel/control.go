@@ -50,21 +50,6 @@ func (c *control) send(v interface{}) error {
 	return c.enc.Encode(v)
 }
 
-func (c *control) recv(v interface{}) error {
-	if c.dec == nil {
-		return errors.New("decoder is not initialized")
-	}
-
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
-		return errControlClosed
-	}
-	c.mu.Unlock()
-
-	return c.dec.Decode(v)
-}
-
 func (c *control) Close() error {
 	if c.nc == nil {
 		return nil
