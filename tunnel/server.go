@@ -182,19 +182,47 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 	return s, nil
 }
 
+// ServeHTTP serves both the control protocol and tunnelled traffic on one
+// listener. Deployments that keep the control protocol off the public network
+// use ControlHandler and PublicHandler on separate listeners instead.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch path.Clean(r.URL.Path) {
-	case s.controlPath:
+	if s.isControlRequest(r) {
 		s.checkConnect(s.controlHandler).ServeHTTP(w, r)
 		return
 	}
 
-	if err := s.handleHTTP(w, r); err != nil {
-		if !strings.Contains(err.Error(), "no virtual host available") { // this one is outputted too much, unnecessarily
-			s.log.Error("remote HTTP call failed", zap.String("address", r.RemoteAddr), zap.String("request_uri", r.RequestURI), zap.Error(err))
+	s.PublicHandler().ServeHTTP(w, r)
+}
+
+// ControlHandler serves the control protocol and nothing else, for a listener
+// that is not reachable from the public network. Every other path is answered
+// with 404.
+func (s *Server) ControlHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.isControlRequest(r) {
+			http.NotFound(w, r)
+			return
 		}
-		http.Error(w, err.Error(), http.StatusBadGateway)
-	}
+
+		s.checkConnect(s.controlHandler).ServeHTTP(w, r)
+	})
+}
+
+// PublicHandler serves tunnelled traffic and nothing else. The control path is
+// ordinary traffic here, so a client can serve a domain that happens to use it.
+func (s *Server) PublicHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := s.handleHTTP(w, r); err != nil {
+			if !strings.Contains(err.Error(), "no virtual host available") { // this one is outputted too much, unnecessarily
+				s.log.Error("remote HTTP call failed", zap.String("address", r.RemoteAddr), zap.String("request_uri", r.RequestURI), zap.Error(err))
+			}
+			http.Error(w, err.Error(), http.StatusBadGateway)
+		}
+	})
+}
+
+func (s *Server) isControlRequest(r *http.Request) bool {
+	return path.Clean(r.URL.Path) == s.controlPath
 }
 
 // handleHTTP handles a single HTTP request

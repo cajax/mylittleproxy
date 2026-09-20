@@ -1,6 +1,7 @@
 {
   "debug": false,
   "listen": ":8080",
+  "listenControl": ":8081",
   "signatureKey": "",
   "allowedHosts": ["^.*\\.example\\.com$"],
   "allowedClients": [],

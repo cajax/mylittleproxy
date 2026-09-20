@@ -241,3 +241,19 @@ func TestBuildClientConfigRejectsUnparsableAllowedHostPattern(t *testing.T) {
 		t.Fatal("an invalid allowedHosts pattern was accepted")
 	}
 }
+
+// With separated listeners a client has to dial the control one.
+func TestBuildClientConfigUsesTheControlListener(t *testing.T) {
+	cfg := serverConfig()
+	cfg.Listen = "proxy.example.com:8080"
+	cfg.ListenControl = "control.internal:9090"
+
+	got, err := buildClientConfig(cfg, clientConfigOptions{identifier: "1234", domain: "app.example.com"})
+	if err != nil {
+		t.Fatalf("buildClientConfig: %v", err)
+	}
+
+	if got.ServerAddress != "control.internal:9090" {
+		t.Errorf("ServerAddress = %q, want the control listener", got.ServerAddress)
+	}
+}
